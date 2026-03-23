@@ -28,7 +28,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
-    const baseUrl = new URL(request.url).origin;
+    const baseUrl = process.env.NEXTAUTH_URL 
+      ? new URL(process.env.NEXTAUTH_URL).origin 
+      : new URL(request.url).origin;
 
     // Check if an active (non-expired) share link already exists for this file
     const existingLink = await prisma.shareLink.findFirst({

@@ -226,347 +226,257 @@ export function ShareDialog({
   };
 
   const qrUrl = shareUrl
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareUrl)}&bgcolor=0a0a0a&color=a78bfa`
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(shareUrl)}&bgcolor=121214&color=a78bfa&margin=10`
     : "";
 
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
       <DialogContent
-        className="sm:max-w-xl p-0 overflow-hidden border-0"
-        style={{ maxWidth: "min(95vw, 36rem)" }}
+        className="sm:max-w-xl p-0 overflow-hidden border border-white/5 bg-zinc-950/90 backdrop-blur-xl shadow-2xl"
       >
-        {/* Gradient header */}
-        <div className="relative bg-gradient-to-br from-violet-600/20 via-indigo-600/15 to-purple-700/10 px-6 pt-6 pb-4">
-          <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
-          <DialogHeader className="relative">
-            <DialogTitle className="flex items-center gap-2.5 text-lg">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600/20 border border-violet-500/20">
-                <Link2 className="h-4 w-4 text-violet-400" />
+        {/* Gradient Header */}
+        <div className="relative overflow-hidden px-8 pt-8 pb-6 border-b border-white/5 bg-gradient-to-br from-violet-600/10 via-transparent to-transparent">
+          <div className="absolute top-0 right-0 p-4 opacity-10">
+            <Globe className="h-24 w-24 text-violet-500 -mr-6 -mt-6" />
+          </div>
+          <DialogHeader className="relative z-10">
+            <DialogTitle className="flex items-center gap-3 text-2xl font-bold tracking-tight">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-600/20 border border-violet-500/30 text-violet-400">
+                <Link2 className="h-5 w-5" />
               </div>
-              Share File
+              Share Securely
             </DialogTitle>
-            <p className="text-sm text-muted-foreground mt-1.5 truncate pr-8">
-              {displayFileName}
+            <p className="text-sm text-zinc-400 mt-2 truncate max-w-md">
+              Configuring sharing options for <span className="text-zinc-200 font-medium">{displayFileName}</span>
             </p>
           </DialogHeader>
         </div>
 
-        <div className="px-6 pb-6 space-y-5">
+        <div className="px-8 py-6 space-y-6 max-h-[75vh] overflow-y-auto no-scrollbar">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-3">
+            <div className="flex flex-col items-center justify-center py-16 gap-4">
               <div className="relative">
                 <div className="absolute inset-0 rounded-full bg-violet-500/20 animate-ping" />
-                <Loader2 className="h-8 w-8 animate-spin text-violet-400 relative" />
+                <div className="h-12 w-12 rounded-xl border border-violet-500/30 bg-zinc-900 flex items-center justify-center relative shadow-lg">
+                   <Loader2 className="h-6 w-6 animate-spin text-violet-400" />
+                </div>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Generating share link...
+              <p className="text-sm font-medium text-zinc-300 animate-pulse">
+                Securing your share link...
               </p>
             </div>
           ) : shareUrl ? (
-            <div className="space-y-5">
-              {/* Status row */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge
-                  variant="outline"
-                  className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 gap-1"
-                >
-                  <Globe className="h-3 w-3" />
-                  Active
-                </Badge>
-                {hasPassword && (
-                  <Badge
-                    variant="outline"
-                    className="bg-amber-500/10 text-amber-500 border-amber-500/20 gap-1"
-                  >
-                    <Lock className="h-3 w-3" />
-                    Password
-                  </Badge>
-                )}
-                {maxDownloads && (
-                  <Badge
-                    variant="outline"
-                    className="bg-blue-500/10 text-blue-500 border-blue-500/20 gap-1"
-                  >
-                    <Download className="h-3 w-3" />
-                    {downloadCount}/{maxDownloads}
-                  </Badge>
-                )}
-                {reused && (
-                  <Badge variant="outline" className="text-muted-foreground gap-1 text-xs">
-                    Existing link
-                  </Badge>
-                )}
-              </div>
-
-              {/* URL bar */}
-              <div className="relative group">
-                <div className="flex items-center rounded-xl border bg-muted/30 transition-colors focus-within:border-violet-500/50 focus-within:bg-muted/50">
-                  <div className="flex items-center justify-center w-10 shrink-0">
-                    <Link2 className="h-4 w-4 text-muted-foreground" />
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              {/* URL Display Card */}
+              <div className="space-y-3">
+                <Label className="text-xs font-semibold uppercase tracking-widest text-zinc-500 ml-1">
+                  Public Share Link
+                </Label>
+                <div className="group relative">
+                  <div className="flex items-center gap-2 rounded-2xl border border-white/5 bg-zinc-900/50 p-1.5 transition-all duration-300 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/10">
+                    <div className="pl-3 py-2 flex items-center min-w-0 flex-1">
+                       < Globe className="h-4 w-4 text-zinc-500 mr-3 shrink-0" />
+                       <input
+                        value={shareUrl}
+                        readOnly
+                        className="w-full bg-transparent text-sm font-mono text-zinc-300 outline-none select-all"
+                        onClick={(e) => (e.target as HTMLInputElement).select()}
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={copyToClipboard}
+                      className={`h-9 rounded-xl px-4 font-medium transition-all duration-300 ${copied ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-600/20'}`}
+                    >
+                      {copied ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                           <Copy className="h-3.5 w-3.5" />
+                           <span>Copy</span>
+                        </div>
+                      )}
+                    </Button>
                   </div>
-                  <input
-                    value={shareUrl}
-                    readOnly
-                    className="flex-1 bg-transparent py-2.5 pr-2 text-xs font-mono outline-none text-foreground/80 select-all"
-                    onClick={(e) => (e.target as HTMLInputElement).select()}
-                  />
+                </div>
+
+                <div className="flex gap-2 pt-1">
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
-                    onClick={copyToClipboard}
-                    className="shrink-0 mr-1 h-8 px-3 rounded-lg"
+                    onClick={() => window.open(shareUrl, "_blank")}
+                    className="h-8 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/5 text-zinc-300 text-xs px-3"
                   >
-                    {copied ? (
-                      <Check className="h-3.5 w-3.5 text-green-500" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
-                    <span className="ml-1.5 text-xs">
-                      {copied ? "Copied!" : "Copy"}
-                    </span>
+                    <ExternalLink className="mr-1.5 h-3 w-3" />
+                    Preview
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowQR(!showQR)}
+                    className={`h-8 rounded-lg border border-white/5 text-zinc-300 text-xs px-3 transition-colors ${showQR ? 'bg-violet-500/10 border-violet-500/20 text-violet-400' : 'bg-zinc-900 hover:bg-zinc-800'}`}
+                  >
+                    <QrCode className="mr-1.5 h-3 w-3" />
+                    QR Code
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={copyEmbedCode}
+                    className="h-8 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/5 text-zinc-300 text-xs px-3"
+                  >
+                    <Eye className="mr-1.5 h-3 w-3" />
+                    Embed
                   </Button>
                 </div>
               </div>
 
-              {/* Quick actions */}
-              <div className="grid grid-cols-3 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.open(shareUrl, "_blank")}
-                  className="h-9 text-xs"
-                >
-                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                  Open
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={copyEmbedCode}
-                  className="h-9 text-xs"
-                >
-                  {copiedEmbed ? (
-                    <Check className="mr-1.5 h-3.5 w-3.5 text-green-500" />
-                  ) : (
-                    <Copy className="mr-1.5 h-3.5 w-3.5" />
-                  )}
-                  Embed
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowQR(!showQR)}
-                  className={`h-9 text-xs ${showQR ? "border-violet-500/40 bg-violet-500/10" : ""}`}
-                >
-                  <QrCode className="mr-1.5 h-3.5 w-3.5" />
-                  QR
-                </Button>
-              </div>
-
-              {/* QR Code panel */}
               {showQR && (
-                <div className="flex justify-center py-3 rounded-xl bg-muted/30 border">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={qrUrl}
-                    alt="QR Code"
-                    className="rounded-lg"
-                    width={160}
-                    height={160}
-                  />
+                <div className="flex flex-col items-center justify-center p-6 rounded-2xl bg-zinc-900/80 border border-white/5 animate-in zoom-in-95 duration-200">
+                  <div className="bg-white p-2 rounded-xl shadow-lg">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={qrUrl} alt="QR Code" className="w-40 h-40" />
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-4 uppercase tracking-tighter">Scan to open on mobile</p>
                 </div>
               )}
 
-              <Separator className="opacity-50" />
+              <Separator className="bg-white/5" />
 
-              {/* Settings section */}
+              {/* Security Settings Section */}
               <div className="space-y-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Shield className="h-3.5 w-3.5" />
-                  Link Settings
-                </p>
+                 <div className="flex items-center justify-between mb-2">
+                    <Label className="text-xs font-semibold uppercase tracking-widest text-zinc-500 ml-1">
+                      Link Security
+                    </Label>
+                    <Badge variant="outline" className="text-[10px] uppercase font-bold text-violet-400 border-violet-400/20 bg-violet-400/5">
+                       Advanced
+                    </Badge>
+                 </div>
 
-                {/* Password protection */}
-                <div className="flex items-center justify-between gap-4 rounded-xl bg-muted/20 border px-4 py-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 shrink-0">
-                      <Lock className="h-4 w-4 text-amber-500" />
+                {/* Settings Grid */}
+                <div className="grid gap-3">
+                  {/* Password Protection */}
+                  <div className={`p-4 rounded-2xl border transition-all duration-300 ${passwordEnabled ? 'bg-zinc-900/50 border-amber-500/30 ring-1 ring-amber-500/10' : 'bg-zinc-900/30 border-white/5'}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${passwordEnabled ? 'bg-amber-500/10 text-amber-500' : 'bg-zinc-800 text-zinc-500'}`}>
+                          <Lock className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-zinc-200">Password Lock</p>
+                          <p className="text-xs text-zinc-500">Require credentials for access</p>
+                        </div>
+                      </div>
+                      <Switch checked={passwordEnabled} onCheckedChange={setPasswordEnabled} />
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">Password</p>
-                      <p className="text-xs text-muted-foreground">
-                        {hasPassword
-                          ? "Password protection active"
-                          : "Require password to access"}
-                      </p>
+                    {passwordEnabled && (
+                      <div className="mt-3 relative animate-in slide-in-from-top-2 duration-200">
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Create access password"
+                          value={passwordValue}
+                          onChange={(e) => setPasswordValue(e.target.value)}
+                          className="bg-zinc-950 border-white/10 text-sm h-10 pr-10 rounded-xl"
+                        />
+                        <button 
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                           {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Expiration Setting */}
+                    <div className={`p-4 rounded-2xl border transition-all duration-300 ${expirationEnabled ? 'bg-zinc-900/50 border-blue-500/30 ring-1 ring-blue-500/10' : 'bg-zinc-900/30 border-white/5'}`}>
+                      <div className="flex items-center justify-between mb-3">
+                         <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${expirationEnabled ? 'bg-blue-500/10 text-blue-500' : 'bg-zinc-800 text-zinc-501'}`}>
+                          <Clock className="h-4 w-4" />
+                        </div>
+                        <Switch checked={expirationEnabled} onCheckedChange={setExpirationEnabled} />
+                      </div>
+                      <p className="text-sm font-medium text-zinc-200">Expiration</p>
+                      {expirationEnabled ? (
+                        <select
+                          value={expirationHours}
+                          onChange={(e) => setExpirationHours(e.target.value)}
+                          className="mt-2 w-full bg-zinc-950 border border-white/10 rounded-lg text-xs p-1.5 text-zinc-300 outline-none"
+                        >
+                          <option value="1">1 Hour</option>
+                          <option value="6">6 Hours</option>
+                          <option value="24">1 Day</option>
+                          <option value="168">7 Days</option>
+                        </select>
+                      ) : (
+                        <p className="text-[10px] text-zinc-500 mt-1">Never expires</p>
+                      )}
+                    </div>
+
+                    {/* Download Limit Setting */}
+                    <div className={`p-4 rounded-2xl border transition-all duration-300 ${downloadLimitEnabled ? 'bg-zinc-900/50 border-emerald-500/30 ring-1 ring-emerald-500/10' : 'bg-zinc-900/30 border-white/5'}`}>
+                      <div className="flex items-center justify-between mb-3">
+                         <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${downloadLimitEnabled ? 'bg-emerald-500/10 text-emerald-500' : 'bg-zinc-800 text-zinc-501'}`}>
+                          <Download className="h-4 w-4" />
+                        </div>
+                        <Switch checked={downloadLimitEnabled} onCheckedChange={setDownloadLimitEnabled} />
+                      </div>
+                      <p className="text-sm font-medium text-zinc-200">Limit</p>
+                      {downloadLimitEnabled ? (
+                        <Input
+                          type="number"
+                          value={downloadLimitValue}
+                          onChange={(e) => setDownloadLimitValue(e.target.value)}
+                          className="mt-2 h-7 bg-zinc-950 border-white/10 text-xs px-2 rounded-lg"
+                        />
+                      ) : (
+                        <p className="text-[10px] text-zinc-500 mt-1">Unlimited</p>
+                      )}
                     </div>
                   </div>
-                  <Switch
-                    checked={passwordEnabled}
-                    onCheckedChange={setPasswordEnabled}
-                  />
                 </div>
-                {passwordEnabled && (
-                  <div className="pl-4">
-                    <div className="relative">
-                      <Input
-                        type={showPassword ? "text" : "password"}
-                        placeholder={
-                          hasPassword
-                            ? "Enter new password to change"
-                            : "Set a password"
-                        }
-                        value={passwordValue}
-                        onChange={(e) => setPasswordValue(e.target.value)}
-                        className="pr-10 text-sm"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                        onClick={() => setShowPassword(!showPassword)}
-                        type="button"
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-3.5 w-3.5" />
-                        ) : (
-                          <Eye className="h-3.5 w-3.5" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
 
-                {/* Expiration */}
-                <div className="flex items-center justify-between gap-4 rounded-xl bg-muted/20 border px-4 py-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 shrink-0">
-                      <Clock className="h-4 w-4 text-blue-500" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">Expiration</p>
-                      <p className="text-xs text-muted-foreground">
-                        Auto-expire after time period
-                      </p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={expirationEnabled}
-                    onCheckedChange={setExpirationEnabled}
-                  />
-                </div>
-                {expirationEnabled && (
-                  <div className="pl-4 flex items-center gap-2">
-                    <select
-                      value={expirationHours}
-                      onChange={(e) => setExpirationHours(e.target.value)}
-                      className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    >
-                      <option value="1">1 hour</option>
-                      <option value="6">6 hours</option>
-                      <option value="24">24 hours</option>
-                      <option value="72">3 days</option>
-                      <option value="168">7 days</option>
-                      <option value="720">30 days</option>
-                    </select>
-                  </div>
-                )}
-
-                {/* Download limit */}
-                <div className="flex items-center justify-between gap-4 rounded-xl bg-muted/20 border px-4 py-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 shrink-0">
-                      <Download className="h-4 w-4 text-indigo-500" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">Download Limit</p>
-                      <p className="text-xs text-muted-foreground">
-                        {downloadCount > 0
-                          ? `${downloadCount} downloads so far`
-                          : "Limit total number of downloads"}
-                      </p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={downloadLimitEnabled}
-                    onCheckedChange={setDownloadLimitEnabled}
-                  />
-                </div>
-                {downloadLimitEnabled && (
-                  <div className="pl-4">
-                    <Input
-                      type="number"
-                      min={1}
-                      placeholder="Max downloads"
-                      value={downloadLimitValue}
-                      onChange={(e) => setDownloadLimitValue(e.target.value)}
-                      className="w-32 text-sm"
-                    />
-                  </div>
-                )}
-
-                {/* Save settings button */}
                 <Button
-                  size="sm"
                   onClick={saveSettings}
                   disabled={savingSettings}
-                  className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-lg shadow-violet-500/20 h-9"
+                  className="w-full h-11 bg-zinc-100 hover:bg-white text-zinc-950 font-bold rounded-2xl transition-all duration-300 shadow-xl shadow-white/5 mt-2"
                 >
-                  {savingSettings ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Check className="mr-2 h-4 w-4" />
-                  )}
-                  Save Settings
+                  {savingSettings ? <Loader2 className="animate-spin h-5 w-5" /> : "Apply Security Policy"}
                 </Button>
               </div>
 
-              <Separator className="opacity-50" />
-
-              {/* Footer info + danger zone */}
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">
-                  {createdAt && (
-                    <span>
-                      Created{" "}
-                      {new Date(createdAt).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={regenerateLink}
-                    className="h-8 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    <RefreshCw className="mr-1 h-3.5 w-3.5" />
-                    New Link
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
+              <div className="flex items-center justify-between pt-2">
+                 <div className="flex items-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={regenerateLink}
+                      className="text-zinc-500 hover:text-white text-[10px] font-bold uppercase tracking-widest gap-2"
+                    >
+                      <RefreshCw size={12} />
+                      Regenerate
+                    </Button>
+                 </div>
+                 <Button 
+                    variant="ghost" 
+                    size="sm" 
                     onClick={removeShareLink}
                     disabled={removing}
-                    className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                    className="text-zinc-600 hover:text-red-400 text-[10px] font-bold uppercase tracking-widest gap-2"
                   >
-                    {removing ? (
-                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Trash2 className="mr-1 h-3.5 w-3.5" />
-                    )}
-                    Remove
+                    {removing ? <Loader2 className="animate-spin" size={12} /> : <Trash2 size={12} />}
+                    Disable Link
                   </Button>
-                </div>
               </div>
             </div>
           ) : null}
         </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
       </DialogContent>
     </Dialog>
   );
