@@ -129,3 +129,161 @@
     scroll-behavior: smooth;
   }
 }
+
+/* TipTap Editor Styles */
+.tiptap {
+  outline: none;
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  color: var(--muted-foreground);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.tiptap h1 {
+  font-size: 2em;
+  font-weight: 700;
+  margin: 0.67em 0;
+  line-height: 1.2;
+}
+
+.tiptap h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  margin: 0.75em 0;
+  line-height: 1.3;
+}
+
+.tiptap h3 {
+  font-size: 1.25em;
+  font-weight: 600;
+  margin: 0.75em 0;
+  line-height: 1.4;
+}
+
+.tiptap ul,
+.tiptap ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.tiptap ul {
+  list-style-type: disc;
+}
+
+.tiptap ol {
+  list-style-type: decimal;
+}
+
+.tiptap li {
+  margin: 0.25em 0;
+}
+
+.tiptap ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.tiptap ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+.tiptap ul[data-type="taskList"] li label {
+  margin-top: 0.25em;
+}
+
+.tiptap ul[data-type="taskList"] li input[type="checkbox"] {
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.tiptap blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 1em;
+  margin: 1em 0;
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+.tiptap pre {
+  background-color: var(--muted);
+  border-radius: 0.5em;
+  padding: 0.75em 1em;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.tiptap code {
+  background-color: var(--muted);
+  border-radius: 0.25em;
+  padding: 0.15em 0.35em;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.tiptap pre code {
+  background: none;
+  padding: 0;
+}
+
+.tiptap hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.5em 0;
+}
+
+.tiptap mark {
+  background-color: #fef08a;
+  border-radius: 0.15em;
+  padding: 0.05em 0.15em;
+}
+
+.dark .tiptap mark {
+  background-color: #854d0e;
+  color: #fef9c3;
+}
+
+.tiptap table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+
+.tiptap th,
+.tiptap td {
+  border: 1px solid var(--border);
+  padding: 0.5em 0.75em;
+  text-align: left;
+  min-width: 80px;
+}
+
+.tiptap th {
+  background-color: var(--muted);
+  font-weight: 600;
+}
+
+.tiptap img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5em;
+  margin: 1em auto;
+  display: block;
+}
+
+.tiptap a {
+  color: var(--primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.tiptap a:hover {
+  opacity: 0.8;
+}

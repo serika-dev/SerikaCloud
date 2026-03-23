@@ -16,6 +16,7 @@ import {
   Gauge,
   Clock,
 } from "lucide-react";
+import { AppSwitcher } from "@/components/shared/app-switcher";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { StorageIndicator } from "@/components/files/storage-indicator";
@@ -51,6 +52,7 @@ export function Sidebar({ user }: SidebarProps) {
     <div className="flex h-full flex-col">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-4 py-6">
+        <AppSwitcher current="cloud" />
         <Link href="/" className="group inline-block">
           <Image
             src="/Logo.svg"
