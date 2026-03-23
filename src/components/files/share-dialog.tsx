@@ -477,7 +477,3 @@ export function ShareDialog({
     </Dialog>
   );
 }
-      </DialogContent>
-    </Dialog>
-  );
-}
