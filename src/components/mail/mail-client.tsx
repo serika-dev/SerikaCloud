@@ -551,6 +551,7 @@ export function MailClient() {
   const [orgs, setOrgs] = useState<OrgSummary[]>([]);
   const [activeOrgId, setActiveOrgId] = useState<string | null>(null);
   const [orgView, setOrgView] = useState<OrgView>(null);
+  const [showImap, setShowImap] = useState(false);
   const [orgMembers, setOrgMembers] = useState<OrgMemberSidebar[]>([]);
   const [groupMailboxes, setGroupMailboxes] = useState<GroupMailboxSidebar[]>([]);
   const [blockRemoteImages, setBlockRemoteImages] = useState(() => {
@@ -637,11 +638,20 @@ export function MailClient() {
     setActiveOrgId(orgId);
     setOrgView(view);
     setShowSettings(false);
+    setShowImap(false);
     setSelectedEmail(null);
   };
 
   const closeOrgView = () => {
     setOrgView(null);
+    setShowImap(false);
+  };
+
+  const openImap = () => {
+    setShowImap(true);
+    setShowSettings(false);
+    setOrgView(null);
+    setSelectedEmail(null);
   };
 
   const toggleStar = async (emailId: string, e: React.MouseEvent) => {
@@ -747,8 +757,8 @@ export function MailClient() {
 
   const inboxUnread = folders.find((f) => f.type === "inbox")?.unreadCount || 0;
 
-  // Org views (admin, tickets, imap)
-  if (orgView && activeOrgId) {
+  // IMAP view (personal, not org-specific)
+  if (showImap) {
     return (
       <div className="flex w-full h-full">
         <Sidebar
@@ -760,18 +770,17 @@ export function MailClient() {
           inboxUnread={inboxUnread}
           orgs={orgs}
           activeOrgId={activeOrgId}
-          orgView={orgView}
+          orgView={null}
           groupMailboxes={groupMailboxes}
-          onFolderClick={(type) => { setActiveFolder(type); setShowStarred(false); setShowSettings(false); setOrgView(null); setSelectedEmail(null); }}
-          onStarredClick={() => { setShowStarred(true); setShowSettings(false); setOrgView(null); setSelectedEmail(null); }}
-          onSettingsClick={() => { setShowSettings(true); setOrgView(null); }}
+          showImap={true}
+          onFolderClick={(type) => { setActiveFolder(type); setShowStarred(false); setShowSettings(false); setOrgView(null); setShowImap(false); setSelectedEmail(null); }}
+          onStarredClick={() => { setShowStarred(true); setShowSettings(false); setOrgView(null); setShowImap(false); setSelectedEmail(null); }}
+          onSettingsClick={() => { setShowSettings(true); setOrgView(null); setShowImap(false); }}
           onCompose={() => { setReplyTo(null); setComposing(true); }}
           onOrgView={openOrgView}
-          onImapClick={() => openOrgView(activeOrgId, "imap")}
+          onImapClick={openImap}
         />
-        {orgView === "admin" && <OrgAdmin orgId={activeOrgId} onBack={closeOrgView} />}
-        {orgView === "tickets" && <TicketPanel orgId={activeOrgId} members={orgMembers} onBack={closeOrgView} />}
-        {orgView === "imap" && <ImapSettings onBack={closeOrgView} />}
+        <ImapSettings onBack={() => setShowImap(false)} />
         {composing && (
           <ComposeDialog
             mailboxAddress={mailbox?.address || ""}
@@ -800,12 +809,13 @@ export function MailClient() {
           activeOrgId={activeOrgId}
           orgView={null}
           groupMailboxes={groupMailboxes}
-          onFolderClick={(type) => { setActiveFolder(type); setShowStarred(false); setShowSettings(false); setOrgView(null); setSelectedEmail(null); }}
-          onStarredClick={() => { setShowStarred(true); setShowSettings(false); setOrgView(null); setSelectedEmail(null); }}
+          showImap={false}
+          onFolderClick={(type) => { setActiveFolder(type); setShowStarred(false); setShowSettings(false); setOrgView(null); setShowImap(false); setSelectedEmail(null); }}
+          onStarredClick={() => { setShowStarred(true); setShowSettings(false); setOrgView(null); setShowImap(false); setSelectedEmail(null); }}
           onSettingsClick={() => setShowSettings(true)}
           onCompose={() => { setReplyTo(null); setComposing(true); }}
           onOrgView={openOrgView}
-          onImapClick={() => openOrgView(orgs[0]?.id || "", "imap")}
+          onImapClick={openImap}
         />
         <SettingsPanel mailbox={mailbox} onClose={() => setShowSettings(false)} />
         {composing && (
@@ -835,12 +845,13 @@ export function MailClient() {
         activeOrgId={activeOrgId}
         orgView={null}
         groupMailboxes={groupMailboxes}
-        onFolderClick={(type) => { setActiveFolder(type); setShowStarred(false); setOrgView(null); setSelectedEmail(null); }}
-        onStarredClick={() => { setShowStarred(true); setOrgView(null); setSelectedEmail(null); }}
+        showImap={false}
+        onFolderClick={(type) => { setActiveFolder(type); setShowStarred(false); setOrgView(null); setShowImap(false); setSelectedEmail(null); }}
+        onStarredClick={() => { setShowStarred(true); setOrgView(null); setShowImap(false); setSelectedEmail(null); }}
         onSettingsClick={() => setShowSettings(true)}
         onCompose={() => { setReplyTo(null); setComposing(true); }}
         onOrgView={openOrgView}
-        onImapClick={() => openOrgView(orgs[0]?.id || "", "imap")}
+        onImapClick={openImap}
       />
 
       {/* Email List */}
@@ -1109,7 +1120,7 @@ export function MailClient() {
 // ─── Sidebar Component ───────────────────────────────────────────────────────
 function Sidebar({
   folders, activeFolder, showStarred, showSettings, mailbox, inboxUnread,
-  orgs, activeOrgId, orgView, groupMailboxes,
+  orgs, activeOrgId, orgView, groupMailboxes, showImap,
   onFolderClick, onStarredClick, onSettingsClick, onCompose,
   onOrgView, onImapClick,
 }: {
@@ -1123,6 +1134,7 @@ function Sidebar({
   activeOrgId?: string | null;
   orgView?: OrgView;
   groupMailboxes?: GroupMailboxSidebar[];
+  showImap?: boolean;
   onFolderClick: (type: string) => void;
   onStarredClick: () => void;
   onSettingsClick: () => void;
@@ -1196,7 +1208,7 @@ function Sidebar({
         <button
           onClick={onImapClick}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-            orgView === "imap"
+            showImap
               ? "bg-purple-100/60 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400"
               : "text-muted-foreground hover:text-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
           }`}

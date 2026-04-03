@@ -672,6 +672,9 @@ function MailboxesTab({ org, isAdmin, onRefresh }: { org: Organization; isAdmin:
   const [displayName, setDisplayName] = useState("");
   const [groupId, setGroupId] = useState("");
   const [creating, setCreating] = useState(false);
+  const [transferAddress, setTransferAddress] = useState("");
+  const [transferring, setTransferring] = useState(false);
+  const [transferError, setTransferError] = useState("");
 
   const createMailbox = async () => {
     if (!address.trim()) return;
@@ -703,12 +706,71 @@ function MailboxesTab({ org, isAdmin, onRefresh }: { org: Organization; isAdmin:
     onRefresh();
   };
 
+  const transferMailbox = async () => {
+    if (!transferAddress.trim()) return;
+    setTransferring(true);
+    setTransferError("");
+    try {
+      const res = await fetch(`/api/org/${org.id}/transfer-mailbox`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: transferAddress.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setTransferAddress("");
+        toast.success(data.message || "Mailbox transferred successfully!");
+        onRefresh();
+      } else {
+        setTransferError(data.error || "Failed to transfer mailbox");
+        toast.error(data.error || "Failed to transfer");
+      }
+    } finally { setTransferring(false); }
+  };
+
   // Get available domains for the address hint
   const activeDomains = org.domains.filter((d) => d.status === "ACTIVE").map((d) => d.domain);
   const MAIL_DOMAIN = "serika.pro";
 
   return (
     <div className="space-y-6">
+      {/* Transfer Personal Mailbox */}
+      {isAdmin && (
+        <section>
+          <h3 className="text-sm font-bold mb-2">Transfer Personal Mailbox</h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            Allow individual users (without org memberships) to transfer their personal mailbox or alias to this organization.
+            <span className="text-amber-500 block mt-1">
+              Note: Org members cannot transfer their mailboxes — this feature is only for individual users.
+            </span>
+          </p>
+          <div className="space-y-2">
+            <Input
+              value={transferAddress}
+              onChange={(e) => setTransferAddress(e.target.value.toLowerCase())}
+              placeholder="user@serika.pro"
+              className="h-9 font-mono"
+            />
+            {transferError && (
+              <p className="text-xs text-red-500">{transferError}</p>
+            )}
+            <Button
+              onClick={transferMailbox}
+              disabled={transferring || !transferAddress.trim()}
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+            >
+              {transferring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+              Request Transfer
+            </Button>
+          </div>
+        </section>
+      )}
+
+      {isAdmin && <Separator className="bg-zinc-200 dark:bg-[#1a1a1a]" />}
+
+      {/* Create Group Mailbox */}
       {isAdmin && (
         <section>
           <h3 className="text-sm font-bold mb-2">Create Group Mailbox</h3>
