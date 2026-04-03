@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requireOrgRole } from "@/lib/org";
+import { Prisma } from "@prisma/client";
 
 // POST — Transfer personal mailbox to org group mailbox
 // RESTRICTION: Org members CANNOT do this. Only individuals (non-org members) can.
@@ -131,14 +131,17 @@ export async function POST(
 
       // Move them to group mailbox
       await Promise.all(
-        emails.map((email) =>
-          prisma.groupEmail.create({
+        emails.map((email) => {
+          const toAddresses = Array.isArray(email.toAddresses) ? email.toAddresses : [];
+          const ccAddresses = Array.isArray(email.ccAddresses) ? email.ccAddresses : [];
+
+          return prisma.groupEmail.create({
             data: {
               messageId: email.messageId,
               fromAddress: email.fromAddress,
               fromName: email.fromName,
-              toAddresses: email.toAddresses,
-              ccAddresses: email.ccAddresses,
+              toAddresses: toAddresses as Prisma.InputJsonValue,
+              ccAddresses: ccAddresses as Prisma.InputJsonValue,
               subject: email.subject,
               bodyText: email.bodyText,
               bodyHtml: email.bodyHtml,
@@ -147,8 +150,8 @@ export async function POST(
               groupMailboxId: groupMailbox.id,
               folderId: groupInbox.id,
             },
-          })
-        )
+          });
+        })
       );
 
       // Delete moved emails from personal mailbox
