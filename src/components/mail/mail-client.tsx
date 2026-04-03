@@ -30,6 +30,11 @@ import {
   AlertOctagon,
   MailCheck,
   MailX,
+  Building2,
+  Server,
+  Users,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,8 +42,36 @@ import { Separator } from "@/components/ui/separator";
 import { AppSwitcher } from "@/components/shared/app-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ComposeDialog } from "./compose-dialog";
+import { OrgAdmin } from "./org-admin";
+import { TicketPanel } from "./ticket-panel";
+import { ImapSettings } from "./imap-settings";
 import { formatDistanceToNow, format, isToday, isYesterday, isThisYear } from "date-fns";
 import { toast } from "sonner";
+
+interface OrgSummary {
+  id: string;
+  name: string;
+  slug: string;
+  role: string;
+  memberCount: number;
+}
+
+interface OrgMemberSidebar {
+  id: string;
+  userId: string;
+  role: string;
+  user: { id: string; name: string; email: string };
+}
+
+interface GroupMailboxSidebar {
+  id: string;
+  address: string;
+  displayName: string | null;
+  groupId: string | null;
+  unreadCount?: number;
+}
+
+type OrgView = null | "admin" | "tickets" | "imap";
 
 interface MailFolder {
   id: string;
@@ -76,12 +109,14 @@ interface Email {
 interface EmailAlias {
   id: string;
   address: string;
+  displayName?: string | null;
 }
 
 interface Mailbox {
   id: string;
   address: string;
   isPrimary: boolean;
+  displayName?: string | null;
   aliases?: EmailAlias[];
 }
 
@@ -241,6 +276,11 @@ function SettingsPanel({ mailbox, onClose }: { mailbox: Mailbox; onClose: () => 
   const [newAlias, setNewAlias] = useState("");
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [mailboxDisplayName, setMailboxDisplayName] = useState(mailbox.displayName || "");
+  const [savingMailboxName, setSavingMailboxName] = useState(false);
+  const [editingAliasId, setEditingAliasId] = useState<string | null>(null);
+  const [editingAliasName, setEditingAliasName] = useState("");
+  const [savingAliasId, setSavingAliasId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/mail/aliases")
@@ -248,6 +288,54 @@ function SettingsPanel({ mailbox, onClose }: { mailbox: Mailbox; onClose: () => 
       .then((data) => { setAliases(data.aliases || []); })
       .finally(() => setLoading(false));
   }, []);
+
+  const saveMailboxDisplayName = async () => {
+    setSavingMailboxName(true);
+    try {
+      const res = await fetch("/api/mail", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: mailboxDisplayName || null }),
+      });
+      if (res.ok) {
+        toast.success("Display name saved");
+      } else {
+        toast.error("Failed to save");
+      }
+    } catch {
+      toast.error("Failed to save");
+    } finally {
+      setSavingMailboxName(false);
+    }
+  };
+
+  const saveAliasDisplayName = async (aliasId: string) => {
+    setSavingAliasId(aliasId);
+    try {
+      const res = await fetch("/api/mail/aliases", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: aliasId, displayName: editingAliasName || null }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setAliases((prev) => prev.map((a) => (a.id === aliasId ? updated : a)));
+        toast.success("Alias display name saved");
+      } else {
+        toast.error("Failed to save");
+      }
+    } catch {
+      toast.error("Failed to save");
+    } finally {
+      setSavingAliasId(null);
+      setEditingAliasId(null);
+    }
+  };
+
+  const startEditingAlias = (alias: EmailAlias) => {
+    setEditingAliasId(alias.id);
+    setEditingAliasName(alias.displayName || "");
+  };
 
   const createAlias = async () => {
     const username = newAlias.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
@@ -304,6 +392,25 @@ function SettingsPanel({ mailbox, onClose }: { mailbox: Mailbox; onClose: () => 
                 <p className="text-xs text-purple-500">Primary address</p>
               </div>
             </div>
+            <div className="pt-2 border-t border-zinc-200 dark:border-[#222]">
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Appear As (Default Name)</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={mailboxDisplayName}
+                  onChange={(e) => setMailboxDisplayName(e.target.value)}
+                  placeholder="Your name"
+                  className="h-8 text-sm"
+                />
+                <Button
+                  onClick={saveMailboxDisplayName}
+                  disabled={savingMailboxName}
+                  size="sm"
+                  className="bg-purple-600 hover:bg-purple-700 text-white shrink-0"
+                >
+                  {savingMailboxName ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+                </Button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -329,20 +436,55 @@ function SettingsPanel({ mailbox, onClose }: { mailbox: Mailbox; onClose: () => 
               aliases.map((alias) => (
                 <div
                   key={alias.id}
-                  className="flex items-center justify-between rounded-lg border border-zinc-200 dark:border-[#1a1a1a] bg-white dark:bg-[#111] px-4 py-3"
+                  className="rounded-lg border border-zinc-200 dark:border-[#1a1a1a] bg-white dark:bg-[#111] px-4 py-3 space-y-2"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <AtSign className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-mono">{alias.address}</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <AtSign className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-mono">{alias.address}</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => deleteAlias(alias.id)}
+                      className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => deleteAlias(alias.id)}
-                    className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Appear As:</span>
+                    {editingAliasId === alias.id ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <Input
+                          value={editingAliasName}
+                          onChange={(e) => setEditingAliasName(e.target.value)}
+                          placeholder="Display name"
+                          className="h-7 text-sm flex-1"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveAliasDisplayName(alias.id);
+                            if (e.key === "Escape") { setEditingAliasId(null); setEditingAliasName(""); }
+                          }}
+                        />
+                        <Button
+                          onClick={() => saveAliasDisplayName(alias.id)}
+                          disabled={savingAliasId === alias.id}
+                          size="sm"
+                          className="h-7 bg-purple-600 hover:bg-purple-700 text-white px-2"
+                        >
+                          {savingAliasId === alias.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+                        </Button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => startEditingAlias(alias)}
+                        className="text-sm text-foreground hover:text-purple-500 transition-colors"
+                      >
+                        {alias.displayName || <span className="text-muted-foreground/50 italic">No name set</span>}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))
             )}
@@ -406,6 +548,18 @@ export function MailClient() {
   const [showStarred, setShowStarred] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
+  const [orgs, setOrgs] = useState<OrgSummary[]>([]);
+  const [activeOrgId, setActiveOrgId] = useState<string | null>(null);
+  const [orgView, setOrgView] = useState<OrgView>(null);
+  const [orgMembers, setOrgMembers] = useState<OrgMemberSidebar[]>([]);
+  const [groupMailboxes, setGroupMailboxes] = useState<GroupMailboxSidebar[]>([]);
+  const [blockRemoteImages, setBlockRemoteImages] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("mail-block-images") === "true";
+    }
+    return true; // Default to privacy-focused
+  });
+  const [showPrivacyWarning, setShowPrivacyWarning] = useState(false);
 
   const fetchEmails = useCallback(async () => {
     setLoading(true);
@@ -457,6 +611,38 @@ export function MailClient() {
   }, []);
 
   useEffect(() => { fetchEmails(); }, [fetchEmails]);
+
+  // Fetch user's organizations
+  useEffect(() => {
+    fetch("/api/org")
+      .then((r) => r.json())
+      .then((data) => setOrgs(data.organizations || []))
+      .catch(() => {});
+  }, []);
+
+  // Fetch org members and group mailboxes when an org is selected
+  useEffect(() => {
+    if (!activeOrgId) { setOrgMembers([]); setGroupMailboxes([]); return; }
+    fetch(`/api/org/${activeOrgId}/members`)
+      .then((r) => r.json())
+      .then((d) => setOrgMembers(d.members || []))
+      .catch(() => {});
+    fetch(`/api/org/${activeOrgId}/group-mail`)
+      .then((r) => r.json())
+      .then((d) => setGroupMailboxes(d.mailboxes || []))
+      .catch(() => {});
+  }, [activeOrgId]);
+
+  const openOrgView = (orgId: string, view: OrgView) => {
+    setActiveOrgId(orgId);
+    setOrgView(view);
+    setShowSettings(false);
+    setSelectedEmail(null);
+  };
+
+  const closeOrgView = () => {
+    setOrgView(null);
+  };
 
   const toggleStar = async (emailId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -510,9 +696,25 @@ export function MailClient() {
     toast.success(email.isRead ? "Marked as unread" : "Marked as read");
   };
 
+  const toggleBlockImages = () => {
+    const newValue = !blockRemoteImages;
+    setBlockRemoteImages(newValue);
+    localStorage.setItem("mail-block-images", String(newValue));
+    toast.success(newValue ? "Remote images blocked" : "Remote images enabled");
+  };
+
+  const checkTrackingPixels = (html: string): boolean => {
+    // Detect 1x1 images (tracking pixels)
+    const hasTrackingPixel = /<(img|image)[^>]*width=["']?1["']?[^>]*height=["']?1["']?[^>]*>/i.test(html) ||
+      /<(img|image)[^>]*height=["']?1["']?[^>]*width=["']?1["']?[^>]*>/i.test(html) ||
+      /<(img|image)[^>]*src=["'][^"']*(beacon|pixel|track|analytics|open)[^"']*["'][^>]*>/i.test(html);
+    return hasTrackingPixel;
+  };
+
   const selectEmail = async (email: Email) => {
     setSelectedEmail(email);
     setMobileView("detail");
+    setShowPrivacyWarning(checkTrackingPixels(email.bodyHtml || ""));
     await markAsRead(email);
   };
 
@@ -545,6 +747,44 @@ export function MailClient() {
 
   const inboxUnread = folders.find((f) => f.type === "inbox")?.unreadCount || 0;
 
+  // Org views (admin, tickets, imap)
+  if (orgView && activeOrgId) {
+    return (
+      <div className="flex w-full h-full">
+        <Sidebar
+          folders={sortedFolders}
+          activeFolder={activeFolder}
+          showStarred={showStarred}
+          showSettings={false}
+          mailbox={mailbox}
+          inboxUnread={inboxUnread}
+          orgs={orgs}
+          activeOrgId={activeOrgId}
+          orgView={orgView}
+          groupMailboxes={groupMailboxes}
+          onFolderClick={(type) => { setActiveFolder(type); setShowStarred(false); setShowSettings(false); setOrgView(null); setSelectedEmail(null); }}
+          onStarredClick={() => { setShowStarred(true); setShowSettings(false); setOrgView(null); setSelectedEmail(null); }}
+          onSettingsClick={() => { setShowSettings(true); setOrgView(null); }}
+          onCompose={() => { setReplyTo(null); setComposing(true); }}
+          onOrgView={openOrgView}
+          onImapClick={() => openOrgView(activeOrgId, "imap")}
+        />
+        {orgView === "admin" && <OrgAdmin orgId={activeOrgId} onBack={closeOrgView} />}
+        {orgView === "tickets" && <TicketPanel orgId={activeOrgId} members={orgMembers} onBack={closeOrgView} />}
+        {orgView === "imap" && <ImapSettings onBack={closeOrgView} />}
+        {composing && (
+          <ComposeDialog
+            mailboxAddress={mailbox?.address || ""}
+            aliases={aliases}
+            replyTo={replyTo}
+            onClose={() => { setComposing(false); setReplyTo(null); }}
+            onSent={() => { setComposing(false); setReplyTo(null); fetchEmails(); }}
+          />
+        )}
+      </div>
+    );
+  }
+
   // Settings view
   if (showSettings && mailbox) {
     return (
@@ -556,10 +796,16 @@ export function MailClient() {
           showSettings={showSettings}
           mailbox={mailbox}
           inboxUnread={inboxUnread}
-          onFolderClick={(type) => { setActiveFolder(type); setShowStarred(false); setShowSettings(false); setSelectedEmail(null); }}
-          onStarredClick={() => { setShowStarred(true); setShowSettings(false); setSelectedEmail(null); }}
+          orgs={orgs}
+          activeOrgId={activeOrgId}
+          orgView={null}
+          groupMailboxes={groupMailboxes}
+          onFolderClick={(type) => { setActiveFolder(type); setShowStarred(false); setShowSettings(false); setOrgView(null); setSelectedEmail(null); }}
+          onStarredClick={() => { setShowStarred(true); setShowSettings(false); setOrgView(null); setSelectedEmail(null); }}
           onSettingsClick={() => setShowSettings(true)}
           onCompose={() => { setReplyTo(null); setComposing(true); }}
+          onOrgView={openOrgView}
+          onImapClick={() => openOrgView(orgs[0]?.id || "", "imap")}
         />
         <SettingsPanel mailbox={mailbox} onClose={() => setShowSettings(false)} />
         {composing && (
@@ -585,10 +831,16 @@ export function MailClient() {
         showSettings={false}
         mailbox={mailbox}
         inboxUnread={inboxUnread}
-        onFolderClick={(type) => { setActiveFolder(type); setShowStarred(false); setSelectedEmail(null); }}
-        onStarredClick={() => { setShowStarred(true); setSelectedEmail(null); }}
+        orgs={orgs}
+        activeOrgId={activeOrgId}
+        orgView={null}
+        groupMailboxes={groupMailboxes}
+        onFolderClick={(type) => { setActiveFolder(type); setShowStarred(false); setOrgView(null); setSelectedEmail(null); }}
+        onStarredClick={() => { setShowStarred(true); setOrgView(null); setSelectedEmail(null); }}
         onSettingsClick={() => setShowSettings(true)}
         onCompose={() => { setReplyTo(null); setComposing(true); }}
+        onOrgView={openOrgView}
+        onImapClick={() => openOrgView(orgs[0]?.id || "", "imap")}
       />
 
       {/* Email List */}
@@ -843,6 +1095,7 @@ export function MailClient() {
       {composing && (
         <ComposeDialog
           mailboxAddress={mailbox?.address || ""}
+          mailboxDisplayName={mailbox?.displayName}
           aliases={aliases}
           replyTo={replyTo}
           onClose={() => { setComposing(false); setReplyTo(null); }}
@@ -856,7 +1109,9 @@ export function MailClient() {
 // ─── Sidebar Component ───────────────────────────────────────────────────────
 function Sidebar({
   folders, activeFolder, showStarred, showSettings, mailbox, inboxUnread,
+  orgs, activeOrgId, orgView, groupMailboxes,
   onFolderClick, onStarredClick, onSettingsClick, onCompose,
+  onOrgView, onImapClick,
 }: {
   folders: MailFolder[];
   activeFolder: string;
@@ -864,11 +1119,19 @@ function Sidebar({
   showSettings: boolean;
   mailbox: Mailbox | null;
   inboxUnread: number;
+  orgs?: OrgSummary[];
+  activeOrgId?: string | null;
+  orgView?: OrgView;
+  groupMailboxes?: GroupMailboxSidebar[];
   onFolderClick: (type: string) => void;
   onStarredClick: () => void;
   onSettingsClick: () => void;
   onCompose: () => void;
+  onOrgView?: (orgId: string, view: OrgView) => void;
+  onImapClick?: () => void;
 }) {
+  const [orgExpanded, setOrgExpanded] = useState<string | null>(null);
+
   return (
     <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-zinc-200 dark:border-[#1a1a1a] bg-zinc-50/80 dark:bg-[#0a0a0a]">
       <div className="flex items-center gap-2 px-4 py-4">
@@ -891,7 +1154,7 @@ function Sidebar({
       <nav className="flex-1 overflow-auto py-2 px-2 space-y-0.5">
         {folders.map((folder) => {
           const Icon = FOLDER_ICONS[folder.type] || Inbox;
-          const isActive = !showStarred && !showSettings && activeFolder === folder.type;
+          const isActive = !showStarred && !showSettings && !orgView && activeFolder === folder.type;
           const showBadge = folder.unreadCount > 0 && folder.type === "inbox";
           return (
             <button
@@ -920,7 +1183,7 @@ function Sidebar({
         <button
           onClick={onStarredClick}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-            showStarred && !showSettings
+            showStarred && !showSettings && !orgView
               ? "bg-yellow-100/60 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400"
               : "text-muted-foreground hover:text-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
           }`}
@@ -928,6 +1191,92 @@ function Sidebar({
           <Star className="h-4 w-4 shrink-0" />
           <span className="flex-1 text-left">Starred</span>
         </button>
+
+        {/* IMAP Access */}
+        <button
+          onClick={onImapClick}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+            orgView === "imap"
+              ? "bg-purple-100/60 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400"
+              : "text-muted-foreground hover:text-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+          }`}
+        >
+          <Server className="h-4 w-4 shrink-0" />
+          <span className="flex-1 text-left">IMAP / SMTP</span>
+        </button>
+
+        {/* Organizations */}
+        {orgs && orgs.length > 0 && (
+          <>
+            <Separator className="my-2 bg-zinc-200 dark:bg-[#1a1a1a]" />
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/50 px-3 py-1">Organizations</p>
+            {orgs.map((org) => {
+              const isExpanded = orgExpanded === org.id;
+              return (
+                <div key={org.id}>
+                  <button
+                    onClick={() => setOrgExpanded(isExpanded ? null : org.id)}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all text-muted-foreground hover:text-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+                  >
+                    <Building2 className="h-4 w-4 shrink-0 text-purple-500" />
+                    <span className="flex-1 text-left truncate">{org.name}</span>
+                    <span className="text-[9px] text-muted-foreground/50">{org.memberCount}</span>
+                    {isExpanded ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
+                  </button>
+
+                  {isExpanded && (
+                    <div className="ml-4 pl-2 border-l border-zinc-200 dark:border-zinc-800 space-y-0.5 mb-1">
+                      <button
+                        onClick={() => onOrgView?.(org.id, "admin")}
+                        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+                          activeOrgId === org.id && orgView === "admin"
+                            ? "bg-purple-100/60 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400"
+                            : "text-muted-foreground hover:text-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+                        }`}
+                      >
+                        <Settings className="h-3.5 w-3.5" />
+                        Admin Panel
+                      </button>
+                      <button
+                        onClick={() => onOrgView?.(org.id, "tickets")}
+                        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+                          activeOrgId === org.id && orgView === "tickets"
+                            ? "bg-purple-100/60 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400"
+                            : "text-muted-foreground hover:text-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+                        }`}
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Tickets
+                      </button>
+
+                      {/* Group mailboxes for this org */}
+                      {groupMailboxes && activeOrgId === org.id && groupMailboxes.length > 0 && (
+                        <>
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/40 px-2.5 pt-1">Group Mail</p>
+                          {groupMailboxes.map((mb) => (
+                            <button
+                              key={mb.id}
+                              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all"
+                              title={mb.address}
+                            >
+                              <Users className="h-3.5 w-3.5" />
+                              <span className="truncate">{mb.displayName || mb.address.split("@")[0]}</span>
+                              {mb.unreadCount ? (
+                                <span className="text-[9px] font-bold bg-purple-500 text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 ml-auto">
+                                  {mb.unreadCount}
+                                </span>
+                              ) : null}
+                            </button>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        )}
       </nav>
 
       <div className="px-3 pb-3 space-y-1.5">

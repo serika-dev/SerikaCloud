@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { to, cc, bcc, subject, bodyHtml, bodyText, inReplyTo, fromAddress } = body;
+  const { to, cc, bcc, subject, bodyHtml, bodyText, inReplyTo, fromAddress, displayName } = body;
 
   if (!to || !Array.isArray(to) || to.length === 0) {
     return NextResponse.json({ error: "Recipients required" }, { status: 400 });
@@ -49,12 +49,19 @@ export async function POST(req: NextRequest) {
       ? fromAddress.toLowerCase()
       : mailbox.address;
 
-  const userName = session.user.name || senderAddress.split("@")[0];
-  const messageId = `<${nanoid()}@serika.pro>`;
+  // Get default displayName for the selected address
+  let defaultDisplayName = mailbox.displayName || session.user.name || senderAddress.split("@")[0];
+  if (senderAddress !== mailbox.address) {
+    const alias = mailbox.aliases.find((a) => a.address === senderAddress);
+    if (alias?.displayName) defaultDisplayName = alias.displayName;
+  }
+
+  // Use provided displayName or default
+  const senderName = displayName?.trim() || defaultDisplayName;
 
   try {
     const command = new SendEmailCommand({
-      FromEmailAddress: `"${userName}" <${senderAddress}>`,
+      FromEmailAddress: `"${senderName}" <${senderAddress}>`,
       Destination: {
         ToAddresses: to,
         CcAddresses: cc?.length ? cc : undefined,
@@ -80,12 +87,15 @@ export async function POST(req: NextRequest) {
 
     const result = await ses.send(command);
 
+    // Generate fallback message ID if needed
+    const messageId = result.MessageId || `<${nanoid()}@serika.pro>`;
+
     // Save to sent folder
     const email = await prisma.email.create({
       data: {
-        messageId: result.MessageId || messageId,
-        fromAddress: mailbox.address,
-        fromName: userName,
+        messageId: messageId,
+        fromAddress: senderAddress,
+        fromName: senderName,
         toAddresses: to,
         ccAddresses: cc || [],
         bccAddresses: bcc || [],

@@ -8,7 +8,8 @@ import { toast } from "sonner";
 
 interface ComposeDialogProps {
   mailboxAddress: string;
-  aliases?: { id: string; address: string }[];
+  mailboxDisplayName?: string | null;
+  aliases?: { id: string; address: string; displayName?: string | null }[];
   replyTo: {
     fromAddress: string;
     fromName: string | null;
@@ -24,6 +25,7 @@ interface ComposeDialogProps {
 
 export function ComposeDialog({
   mailboxAddress,
+  mailboxDisplayName,
   aliases = [],
   replyTo,
   onClose,
@@ -31,6 +33,12 @@ export function ComposeDialog({
 }: ComposeDialogProps) {
   const allAddresses = [mailboxAddress, ...aliases.map((a) => a.address)];
   const [fromAddress, setFromAddress] = useState(mailboxAddress);
+  const [displayName, setDisplayName] = useState(() => {
+    // Get default displayName for initial address
+    if (mailboxDisplayName) return mailboxDisplayName;
+    const alias = aliases.find((a) => a.address === mailboxAddress);
+    return alias?.displayName || mailboxAddress.split("@")[0];
+  });
   const [showFromPicker, setShowFromPicker] = useState(false);
   const [to, setTo] = useState(replyTo ? replyTo.fromAddress : "");
   const [cc, setCc] = useState("");
@@ -41,6 +49,16 @@ export function ComposeDialog({
   const [sending, setSending] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [showCc, setShowCc] = useState(false);
+
+  const updateDisplayName = (addr: string) => {
+    const isMailbox = addr === mailboxAddress;
+    if (isMailbox && mailboxDisplayName) {
+      setDisplayName(mailboxDisplayName);
+    } else {
+      const alias = aliases.find((a) => a.address === addr);
+      setDisplayName(alias?.displayName || addr.split("@")[0]);
+    }
+  };
 
   const quotedText = replyTo?.bodyText
     ? replyTo.bodyText
@@ -95,6 +113,7 @@ export function ComposeDialog({
           bodyHtml: fullBodyHtml,
           inReplyTo: replyTo?.messageId || undefined,
           fromAddress,
+          displayName,
         }),
       });
 
@@ -170,7 +189,11 @@ export function ComposeDialog({
               {allAddresses.map((addr) => (
                 <button
                   key={addr}
-                  onClick={() => { setFromAddress(addr); setShowFromPicker(false); }}
+                  onClick={() => {
+                    setFromAddress(addr);
+                    updateDisplayName(addr);
+                    setShowFromPicker(false);
+                  }}
                   className={`w-full text-left px-3 py-2.5 text-sm font-mono hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-colors ${
                     addr === fromAddress ? "text-purple-600 dark:text-purple-400 bg-purple-50/50 dark:bg-purple-500/5" : "text-foreground"
                   }`}
@@ -180,6 +203,17 @@ export function ComposeDialog({
               ))}
             </div>
           )}
+        </div>
+
+        {/* Appear As */}
+        <div className="flex items-center px-4 py-1.5 border-b border-zinc-100 dark:border-[#1e1e1e]">
+          <span className="text-xs font-medium text-muted-foreground w-12 shrink-0">Appear</span>
+          <Input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Your name"
+            className="border-none h-7 text-sm px-0 shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
+          />
         </div>
 
         {/* To */}

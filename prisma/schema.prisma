@@ -26,6 +26,14 @@ model User {
   documents     Document[]
   mailboxes     Mailbox[]
   presentations Presentation[]
+
+  orgMemberships OrgMember[]
+  orgInvites     OrgInvite[]    @relation("InvitedBy")
+  ticketsCreated Ticket[]       @relation("TicketCreator")
+  ticketsAssigned Ticket[]      @relation("TicketAssignee")
+  ticketMessages TicketMessage[]
+  imapCredentials ImapCredential[]
+  groupMemberships GroupMember[]
 }
 
 model File {
@@ -100,11 +108,12 @@ model Document {
 // ─── SerikaMail ──────────────────────────────────────────────────────────────
 
 model Mailbox {
-  id        String   @id @default(cuid())
-  address   String   @unique
-  userId    String
-  isPrimary Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  address     String   @unique
+  userId      String
+  isPrimary   Boolean  @default(false)
+  displayName String?
+  createdAt   DateTime @default(now())
 
   user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   aliases EmailAlias[]
@@ -115,10 +124,11 @@ model Mailbox {
 }
 
 model EmailAlias {
-  id        String   @id @default(cuid())
-  address   String   @unique
-  mailboxId String
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  address     String   @unique
+  mailboxId   String
+  displayName String?
+  createdAt   DateTime @default(now())
 
   mailbox Mailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
 
@@ -213,4 +223,271 @@ model Slide {
 
   @@index([presentationId])
   @@index([presentationId, order])
+}
+
+// ─── Organizations ──────────────────────────────────────────────────────────
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique // URL-safe identifier, e.g. "acme-corp"
+  avatarUrl   String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members       OrgMember[]
+  domains       OrgDomain[]
+  invites       OrgInvite[]
+  groups        UserGroup[]
+  groupMailboxes GroupMailbox[]
+  tickets       Ticket[]
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model OrgMember {
+  id     String  @id @default(cuid())
+  orgId  String
+  userId String
+  role   OrgRole @default(MEMBER)
+  title  String? // Job title within org
+  joinedAt DateTime @default(now())
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([orgId])
+  @@index([userId])
+}
+
+model OrgInvite {
+  id          String   @id @default(cuid())
+  orgId       String
+  email       String
+  role        OrgRole  @default(MEMBER)
+  token       String   @unique @default(cuid())
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invitedBy User         @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([token])
+  @@index([email])
+}
+
+// ─── Custom Domains ─────────────────────────────────────────────────────────
+
+enum DomainStatus {
+  PENDING     // Added, awaiting DNS verification
+  VERIFYING   // DNS check in progress
+  VERIFIED    // DNS records confirmed
+  ACTIVE      // Fully active — mail can be sent/received
+  FAILED      // Verification failed
+}
+
+model OrgDomain {
+  id              String       @id @default(cuid())
+  orgId           String
+  domain          String       @unique // e.g. "acme.com"
+  status          DomainStatus @default(PENDING)
+  verificationKey String       @unique @default(cuid()) // TXT record value
+  mxVerified      Boolean      @default(false)
+  spfVerified     Boolean      @default(false)
+  dkimVerified    Boolean      @default(false)
+  dmarcVerified   Boolean      @default(false)
+  lastCheckedAt   DateTime?
+  verifiedAt      DateTime?
+  createdAt       DateTime     @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([domain])
+}
+
+// ─── User Groups & Group Mail ───────────────────────────────────────────────
+
+model UserGroup {
+  id          String   @id @default(cuid())
+  orgId       String
+  name        String   // e.g. "Engineering", "Sales"
+  description String?
+  color       String   @default("#6366f1") // Badge color
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org     Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  members GroupMember[]
+  mailbox GroupMailbox?
+
+  @@unique([orgId, name])
+  @@index([orgId])
+}
+
+model GroupMember {
+  id       String   @id @default(cuid())
+  groupId  String
+  userId   String
+  canSend  Boolean  @default(true) // Can send from the group address
+  joinedAt DateTime @default(now())
+
+  group UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([groupId])
+  @@index([userId])
+}
+
+model GroupMailbox {
+  id          String   @id @default(cuid())
+  orgId       String
+  groupId     String?  @unique // null = org-wide address (e.g. info@company.com)
+  address     String   @unique // e.g. "support@acme.com"
+  displayName String?
+  autoReply   String?  // Auto-reply message for incoming emails
+  createdAt   DateTime @default(now())
+
+  org     Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  group   UserGroup?     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  emails  GroupEmail[]
+  folders GroupMailFolder[]
+
+  @@index([orgId])
+  @@index([address])
+}
+
+model GroupMailFolder {
+  id             String @id @default(cuid())
+  name           String
+  type           String // inbox, sent, archive, spam, trash
+  groupMailboxId String
+
+  groupMailbox GroupMailbox  @relation(fields: [groupMailboxId], references: [id], onDelete: Cascade)
+  emails       GroupEmail[]
+
+  @@unique([groupMailboxId, type])
+  @@index([groupMailboxId])
+}
+
+model GroupEmail {
+  id              String    @id @default(cuid())
+  messageId       String?   @unique
+  fromAddress     String
+  fromName        String?
+  toAddresses     Json
+  ccAddresses     Json?
+  bccAddresses    Json?
+  subject         String    @default("(No Subject)")
+  bodyText        String?
+  bodyHtml        String?
+  groupMailboxId  String
+  folderId        String
+  isRead          Boolean   @default(false)
+  isStarred       Boolean   @default(false)
+  assignedToId    String?   // Assigned team member
+  internalNote    String?   // Internal note visible only to team
+  status          String    @default("open") // open, pending, closed
+  headers         Json?
+  inReplyTo       String?
+  references      Json?
+  createdAt       DateTime  @default(now())
+  receivedAt      DateTime  @default(now())
+
+  groupMailbox GroupMailbox    @relation(fields: [groupMailboxId], references: [id], onDelete: Cascade)
+  folder       GroupMailFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@index([groupMailboxId])
+  @@index([folderId])
+  @@index([assignedToId])
+  @@index([receivedAt])
+  @@index([status])
+}
+
+// ─── Ticketing System ───────────────────────────────────────────────────────
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Ticket {
+  id          String         @id @default(cuid())
+  orgId       String
+  number      Int            // Auto-incrementing per org
+  title       String
+  description String?
+  status      TicketStatus   @default(OPEN)
+  priority    TicketPriority @default(MEDIUM)
+  creatorId   String
+  assigneeId  String?
+  tags        Json?          // Array of tag strings
+  emailId     String?        // Link to originating email if ticket created from email
+  dueDate     DateTime?
+  resolvedAt  DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  org      Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  creator  User            @relation("TicketCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  assignee User?           @relation("TicketAssignee", fields: [assigneeId], references: [id], onDelete: Cascade)
+  messages TicketMessage[]
+
+  @@unique([orgId, number])
+  @@index([orgId])
+  @@index([creatorId])
+  @@index([assigneeId])
+  @@index([status])
+  @@index([priority])
+}
+
+model TicketMessage {
+  id         String   @id @default(cuid())
+  ticketId   String
+  authorId   String
+  content    String
+  isInternal Boolean  @default(false) // Internal notes vs customer-visible
+  createdAt  DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([authorId])
+}
+
+// ─── IMAP Access ────────────────────────────────────────────────────────────
+
+model ImapCredential {
+  id           String   @id @default(cuid())
+  userId       String
+  label        String   @default("App Password") // User-given name, e.g. "Thunderbird"
+  passwordHash String   // bcrypt hash of generated app password
+  lastUsedAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

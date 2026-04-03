@@ -200,6 +200,31 @@ export async function POST(req: NextRequest) {
   });
 }
 
+// PATCH — Update mailbox displayName
+export async function PATCH(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { displayName } = await req.json();
+
+  const mailbox = await prisma.mailbox.findFirst({
+    where: { userId: session.user.id, isPrimary: true },
+  });
+
+  if (!mailbox) {
+    return NextResponse.json({ error: "No mailbox found" }, { status: 404 });
+  }
+
+  const updated = await prisma.mailbox.update({
+    where: { id: mailbox.id },
+    data: { displayName: displayName || null },
+  });
+
+  return NextResponse.json({ displayName: updated.displayName });
+}
+
 // Check address availability
 export async function PUT(req: NextRequest) {
   const session = await auth();

@@ -28,14 +28,16 @@ For local dev, use `?app=write` / `?app=mail` / `?app=present` query params, or 
 
 ## 📦 Key Modules
 - `src/lib/storage.ts`: Unified file operations interface. Use instead of direct S3 calls.
+- `src/lib/org.ts`: Organization helper utilities (role checks, membership queries, ticket numbering).
 - `src/lib/audio-metadata.ts`: ID3 tags and album art via `music-metadata-browser`.
 - `src/app/api/files/`: SerikaCloud file management endpoints.
 - `src/app/api/docs/`: SerikaDocs CRUD endpoints.
-- `src/app/api/mail/`: SerikaMail endpoints (list, send, aliases, incoming webhook).
+- `src/app/api/mail/`: SerikaMail endpoints (list, send, aliases, incoming webhook, IMAP credentials).
+- `src/app/api/org/`: Organization management (CRUD, members, invites, domains, groups, group-mail, tickets).
 - `src/app/api/present/`: SerikaPresent endpoints (CRUD, slides).
 - `src/components/files/`: Cloud file browsing and previews.
 - `src/components/docs/`: TipTap document editor + toolbar.
-- `src/components/mail/`: Email client UI + compose dialog.
+- `src/components/mail/`: Email client UI + compose dialog + org admin + tickets + IMAP settings.
 - `src/components/present/`: Slide editor, canvas, present mode.
 
 ## 🛠️ Storage Abstraction
@@ -50,6 +52,15 @@ The app supports dual-mode storage controlled by `STORAGE_PROVIDER` (.env):
 - **Aliases**: Users can create additional @serika.pro aliases routed to their primary mailbox.
 - **Folders**: Auto-created when mailbox is claimed (inbox, sent, drafts, spam, trash, archive).
 - **Domain**: `MAIL_DOMAIN` env var (default: `serika.pro`). `serika.email` is used only for verification emails via SMTP.
+
+## 🏢 Organization Support
+- **Models**: Organization, OrgMember, OrgDomain, OrgInvite, UserGroup, GroupMember, GroupMailbox, GroupMailFolder, GroupEmail, Ticket, TicketMessage, ImapCredential.
+- **Roles**: `OrgRole` enum — OWNER > ADMIN > MEMBER. Role checks via `requireOrgRole()` in `src/lib/org.ts`.
+- **Custom Domains**: Orgs can add custom domains with DNS verification (MX, SPF, DKIM, DMARC). Managed via `/api/org/[orgId]/domains`.
+- **Group Mailboxes**: Shared inboxes (e.g. `support@acme.com`) linked to user groups or org-wide catch-all. Incoming webhook routes to group mailboxes.
+- **Ticketing**: Ticket system per org with priorities (URGENT/HIGH/MEDIUM/LOW), statuses (OPEN/IN_PROGRESS/WAITING/RESOLVED/CLOSED), assignment, and internal notes.
+- **Invites**: Token-based invite system with email verification and role assignment.
+- **IMAP Access**: Users generate app passwords via `/api/mail/imap` for external mail clients. Passwords are bcrypt-hashed; plaintext shown once on creation.
 
 ## 🔧 Core Conventions
 1. **File Keys**: Always generated via `generateB2Key(userId, fileName)` to ensure uniqueness and user isolation.

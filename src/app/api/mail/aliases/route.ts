@@ -59,6 +59,34 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(alias);
 }
 
+export async function PATCH(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id, displayName } = await req.json();
+
+  if (!id) {
+    return NextResponse.json({ error: "Alias ID required" }, { status: 400 });
+  }
+
+  const alias = await prisma.emailAlias.findFirst({
+    where: { id, mailbox: { userId: session.user.id } },
+  });
+
+  if (!alias) {
+    return NextResponse.json({ error: "Alias not found" }, { status: 404 });
+  }
+
+  const updated = await prisma.emailAlias.update({
+    where: { id },
+    data: { displayName: displayName || null },
+  });
+
+  return NextResponse.json(updated);
+}
+
 export async function DELETE(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
