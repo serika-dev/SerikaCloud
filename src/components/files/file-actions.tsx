@@ -36,6 +36,7 @@ import {
   Loader2,
   Archive,
   Folder as FolderIcon,
+  Magnet,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -163,6 +164,39 @@ export function FileActions({
     }
   };
 
+  const handleTorrent = async () => {
+    const toastId = toast.loading(`Creating torrent for "${name}"...`);
+    setLoading(true);
+    try {
+      const payload = type === "file" ? { fileId: id } : { folderId: id };
+      const res = await fetch("/api/files/torrent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to create torrent");
+      }
+
+      const data = await res.json();
+
+      toast.success("Torrent created successfully!", { id: toastId });
+
+      if (data.shareUrl) {
+        await navigator.clipboard.writeText(data.shareUrl);
+        toast.info("Torrent share link copied to clipboard");
+      }
+
+      onRefresh();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to create torrent", { id: toastId });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const isZip = type === "file" && name.toLowerCase().endsWith(".zip");
 
   return (
@@ -190,6 +224,12 @@ export function FileActions({
               Share
             </DropdownMenuItem>
           )}
+
+          {/* Share as Torrent - available for both files and folders */}
+          <DropdownMenuItem onClick={handleTorrent} disabled={loading} className="rounded-lg focus:bg-white/5 focus:text-white transition-colors cursor-pointer py-2 px-3 text-orange-100 focus:text-orange-100">
+            <Magnet className="mr-3 h-4 w-4 text-orange-400" />
+            {loading ? "Creating torrent..." : "Share as Torrent"}
+          </DropdownMenuItem>
           
           {type === "folder" && (
             <DropdownMenuItem onClick={handleZip} disabled={loading} className="rounded-lg focus:bg-white/5 focus:text-white transition-colors cursor-pointer py-2 px-3 text-amber-100 focus:text-amber-100">
