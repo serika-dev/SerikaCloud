@@ -75,6 +75,7 @@ export async function GET(req: NextRequest) {
   const formattedUsers = users.map((user) => ({
     ...user,
     storageUsed: Number(user.storageUsed),
+    storageLimit: Number(user.storageLimit),
   }));
 
   return NextResponse.json({
