@@ -27,6 +27,8 @@ import {
   FileCode,
   Clock,
   Edit3,
+  Database,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -214,6 +216,31 @@ export function UserManagement() {
       fetchUsers();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete user");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleIncreaseStorage = async (user: UserWithStats, additionalBytes: number) => {
+    setActionLoading(user.id);
+    try {
+      const newLimit = Number(user.storageLimit) + additionalBytes;
+      const res = await fetch(`/api/admin/users/${user.id}/storage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storageLimit: newLimit }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to increase storage");
+      }
+
+      const data = await res.json();
+      toast.success(data.message);
+      fetchUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to increase storage");
     } finally {
       setActionLoading(null);
     }
@@ -468,6 +495,46 @@ export function UserManagement() {
                                 <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
                                   <Building2 className="h-3 w-3" />
                                   <span>{user._count.orgMemberships} orgs</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-3">
+                              <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                                Storage Management
+                              </h4>
+                              <div className="space-y-2">
+                                <div className="flex justify-between text-xs">
+                                  <span className="text-zinc-500">Current Limit:</span>
+                                  <span className="font-medium text-zinc-700 dark:text-zinc-300">{formatBytes(user.storageLimit)}</span>
+                                </div>
+                                <div className="flex justify-between text-xs">
+                                  <span className="text-zinc-500">Used:</span>
+                                  <span className="font-medium text-zinc-700 dark:text-zinc-300">{formatBytes(user.storageUsed)}</span>
+                                </div>
+                                <div className="flex flex-wrap gap-1 pt-1">
+                                  {[
+                                    { label: "+10GB", bytes: 10 * 1024 * 1024 * 1024 },
+                                    { label: "+50GB", bytes: 50 * 1024 * 1024 * 1024 },
+                                    { label: "+100GB", bytes: 100 * 1024 * 1024 * 1024 },
+                                    { label: "+500GB", bytes: 500 * 1024 * 1024 * 1024 },
+                                    { label: "+1TB", bytes: 1024 * 1024 * 1024 * 1024 },
+                                  ].map((option) => (
+                                    <Button
+                                      key={option.label}
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-2 text-xs text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/10"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleIncreaseStorage(user, option.bytes);
+                                      }}
+                                      disabled={actionLoading === user.id}
+                                    >
+                                      <Plus className="h-3 w-3 mr-1" />
+                                      {option.label}
+                                    </Button>
+                                  ))}
                                 </div>
                               </div>
                             </div>

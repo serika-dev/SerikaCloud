@@ -14,7 +14,7 @@ model User {
   emailVerified     Boolean     @default(false)
   verificationToken String?     @unique
   storageUsed       BigInt      @default(0)
-  storageLimit      BigInt      @default(1073741824) // 1GB in bytes
+  storageLimit      BigInt      @default(16106127360) // 15GB in bytes
   isAdmin           Boolean     @default(false)
   viewPreference    String      @default("grid")
   createdAt         DateTime    @default(now())
