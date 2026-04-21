@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
         createdAt: true,
         updatedAt: true,
         storageUsed: true,
+        storageLimit: true,
         _count: {
           select: {
             files: true,
@@ -60,6 +61,7 @@ export async function GET(req: NextRequest) {
             documents: true,
             presentations: true,
             mailboxes: true,
+            orgMemberships: true,
           },
         },
       },

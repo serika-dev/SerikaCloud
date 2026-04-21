@@ -15,6 +15,7 @@ import {
   X,
   Gauge,
   Clock,
+  Users,
 } from "lucide-react";
 import { AppSwitcher } from "@/components/shared/app-switcher";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ export function Sidebar({ user }: SidebarProps) {
 
   const adminNavItems = [
     { href: "/", label: "Admin Dashboard", icon: Gauge },
+    { href: "/admin/users", label: "Users", icon: Users },
   ];
 
   const navItems = user?.isAdmin ? adminNavItems : userNavItems;

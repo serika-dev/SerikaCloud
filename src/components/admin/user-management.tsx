@@ -17,6 +17,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  ChevronDown,
+  ChevronUp,
+  Trash2,
+  Key,
+  Crown,
+  Building2,
+  FolderOpen,
+  FileCode,
+  Clock,
+  Edit3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +38,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface UserWithStats {
   id: string;
@@ -38,12 +56,14 @@ interface UserWithStats {
   createdAt: string;
   updatedAt: string;
   storageUsed: number;
+  storageLimit: number;
   _count: {
     files: number;
     folders: number;
     documents: number;
     presentations: number;
     mailboxes: number;
+    orgMemberships: number;
   };
 }
 
@@ -66,6 +86,9 @@ export function UserManagement() {
   const [verifiedFilter, setVerifiedFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserWithStats | null>(null);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -91,6 +114,18 @@ export function UserManagement() {
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  const toggleExpanded = (userId: string) => {
+    setExpandedUsers((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) {
+        next.delete(userId);
+      } else {
+        next.add(userId);
+      }
+      return next;
+    });
+  };
 
   const handleVerify = async (userId: string) => {
     setActionLoading(userId);
@@ -130,6 +165,55 @@ export function UserManagement() {
       toast.success(data.message);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to resend email");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleToggleAdmin = async (user: UserWithStats) => {
+    setActionLoading(user.id);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/admin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isAdmin: !user.isAdmin }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to update admin status");
+      }
+
+      const data = await res.json();
+      toast.success(data.message);
+      fetchUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update admin status");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+
+    setActionLoading(userToDelete.id);
+    try {
+      const res = await fetch(`/api/admin/users/${userToDelete.id}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to delete user");
+      }
+
+      toast.success(`User ${userToDelete.email} has been deleted`);
+      setDeleteDialogOpen(false);
+      setUserToDelete(null);
+      fetchUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete user");
     } finally {
       setActionLoading(null);
     }
@@ -186,128 +270,268 @@ export function UserManagement() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-zinc-50 dark:bg-[#111] border-b border-zinc-200 dark:border-[#1a1a1a]">
+                <th className="px-4 py-3 text-left font-semibold text-zinc-600 dark:text-zinc-400 w-8"></th>
                 <th className="px-4 py-3 text-left font-semibold text-zinc-600 dark:text-zinc-400">User</th>
                 <th className="px-4 py-3 text-left font-semibold text-zinc-600 dark:text-zinc-400">Status</th>
                 <th className="px-4 py-3 text-left font-semibold text-zinc-600 dark:text-zinc-400">Resources</th>
                 <th className="px-4 py-3 text-left font-semibold text-zinc-600 dark:text-zinc-400">Joined</th>
-                <th className="px-4 py-3 text-right font-semibold text-zinc-600 dark:text-zinc-400">Actions</th>
+                <th className="px-4 py-3 text-right font-semibold text-zinc-600 dark:text-zinc-400">Quick Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
                     <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2" />
                     Loading users...
                   </td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
                     No users found.
                   </td>
                 </tr>
               ) : (
                 users.map((user) => (
-                  <tr
-                    key={user.id}
-                    className="border-b border-zinc-100 dark:border-[#1a1a1a] last:border-0 hover:bg-zinc-50 dark:hover:bg-[#111]"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
-                          <User className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                        </div>
-                        <div>
-                          <div className="font-medium text-zinc-900 dark:text-white flex items-center gap-2">
-                            {user.name}
-                            {user.isAdmin && (
-                              <Shield className="h-3 w-3 text-violet-600 dark:text-violet-400" />
-                            )}
+                  <>
+                    <tr
+                      key={user.id}
+                      className="border-b border-zinc-100 dark:border-[#1a1a1a] last:border-0 hover:bg-zinc-50 dark:hover:bg-[#111] cursor-pointer"
+                      onClick={() => toggleExpanded(user.id)}
+                    >
+                      <td className="px-4 py-3">
+                        <Button variant="ghost" size="icon" className="h-6 w-6">
+                          {expandedUsers.has(user.id) ? (
+                            <ChevronUp className="h-4 w-4 text-zinc-400" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-zinc-400" />
+                          )}
+                        </Button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                            <User className="h-4 w-4 text-violet-600 dark:text-violet-400" />
                           </div>
-                          <div className="text-zinc-500 dark:text-zinc-400 text-xs">{user.email}</div>
+                          <div>
+                            <div className="font-medium text-zinc-900 dark:text-white flex items-center gap-2">
+                              {user.name}
+                              {user.isAdmin && (
+                                <Crown className="h-3 w-3 text-amber-500" />
+                              )}
+                            </div>
+                            <div className="text-zinc-500 dark:text-zinc-400 text-xs">{user.email}</div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {user.emailVerified ? (
-                        <Badge
-                          variant="outline"
-                          className="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20"
-                        >
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Verified
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant="outline"
-                          className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-                        >
-                          <XCircle className="h-3 w-3 mr-1" />
-                          Unverified
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        <span className="flex items-center gap-1 text-zinc-500">
-                          <HardDrive className="h-3 w-3" />
-                          {formatBytes(user.storageUsed)}
-                        </span>
-                        <span className="flex items-center gap-1 text-zinc-500">
-                          <FileText className="h-3 w-3" />
-                          {user._count.files}
-                        </span>
-                        <span className="flex items-center gap-1 text-zinc-500">
-                          <Presentation className="h-3 w-3" />
-                          {user._count.presentations}
-                        </span>
-                        <span className="flex items-center gap-1 text-zinc-500">
-                          <Mailbox className="h-3 w-3" />
-                          {user._count.mailboxes}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
-                      {formatDistanceToNow(new Date(user.createdAt), { addSuffix: true })}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {!user.emailVerified && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 gap-1 text-green-600 border-green-500/20 hover:bg-green-500/10"
-                              onClick={() => handleVerify(user.id)}
-                              disabled={actionLoading === user.id}
-                            >
-                              {actionLoading === user.id ? (
-                                <RefreshCw className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <CheckCircle className="h-3 w-3" />
-                              )}
-                              Verify
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 gap-1"
-                              onClick={() => handleResendVerification(user.id)}
-                              disabled={actionLoading === user.id}
-                            >
-                              {actionLoading === user.id ? (
-                                <RefreshCw className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Mail className="h-3 w-3" />
-                              )}
-                              Resend
-                            </Button>
-                          </>
+                      </td>
+                      <td className="px-4 py-3">
+                        {user.emailVerified ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20"
+                          >
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Verified
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                          >
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Unverified
+                          </Badge>
                         )}
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          <span className="flex items-center gap-1 text-zinc-500">
+                            <HardDrive className="h-3 w-3" />
+                            {formatBytes(user.storageUsed)}
+                          </span>
+                          <span className="flex items-center gap-1 text-zinc-500">
+                            <FileText className="h-3 w-3" />
+                            {user._count.files}
+                          </span>
+                          <span className="flex items-center gap-1 text-zinc-500">
+                            <Presentation className="h-3 w-3" />
+                            {user._count.presentations}
+                          </span>
+                          <span className="flex items-center gap-1 text-zinc-500">
+                            <Mailbox className="h-3 w-3" />
+                            {user._count.mailboxes}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
+                        {formatDistanceToNow(new Date(user.createdAt), { addSuffix: true })}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {!user.emailVerified && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 gap-1 text-green-600 border-green-500/20 hover:bg-green-500/10"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleVerify(user.id);
+                                }}
+                                disabled={actionLoading === user.id}
+                              >
+                                {actionLoading === user.id ? (
+                                  <RefreshCw className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <CheckCircle className="h-3 w-3" />
+                                )}
+                                Verify
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 gap-1"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleResendVerification(user.id);
+                                }}
+                                disabled={actionLoading === user.id}
+                              >
+                                {actionLoading === user.id ? (
+                                  <RefreshCw className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Mail className="h-3 w-3" />
+                                )}
+                                Resend
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {expandedUsers.has(user.id) && (
+                      <tr className="bg-zinc-50/50 dark:bg-[#0d0d0d] border-b border-zinc-100 dark:border-[#1a1a1a]">
+                        <td colSpan={6} className="px-4 py-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-3">
+                              <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                                User Details
+                              </h4>
+                              <div className="space-y-1 text-xs">
+                                <div className="flex justify-between">
+                                  <span className="text-zinc-500">User ID:</span>
+                                  <span className="font-mono text-zinc-700 dark:text-zinc-300">{user.id.slice(0, 8)}...</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-zinc-500">Storage Limit:</span>
+                                  <span className="text-zinc-700 dark:text-zinc-300">{formatBytes(user.storageLimit)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-zinc-500">Last Updated:</span>
+                                  <span className="text-zinc-700 dark:text-zinc-300">
+                                    {formatDistanceToNow(new Date(user.updatedAt), { addSuffix: true })}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-zinc-500">Organizations:</span>
+                                  <span className="text-zinc-700 dark:text-zinc-300">{user._count.orgMemberships}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-3">
+                              <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                                Resources Breakdown
+                              </h4>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                                  <FolderOpen className="h-3 w-3" />
+                                  <span>{user._count.folders} folders</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                                  <FileText className="h-3 w-3" />
+                                  <span>{user._count.files} files</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                                  <FileCode className="h-3 w-3" />
+                                  <span>{user._count.documents} documents</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                                  <Presentation className="h-3 w-3" />
+                                  <span>{user._count.presentations} presentations</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                                  <Mailbox className="h-3 w-3" />
+                                  <span>{user._count.mailboxes} mailboxes</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                                  <Building2 className="h-3 w-3" />
+                                  <span>{user._count.orgMemberships} orgs</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-3">
+                              <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                                Admin Actions
+                              </h4>
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className={`h-8 gap-1 text-xs ${
+                                    user.isAdmin
+                                      ? "text-amber-600 border-amber-500/20 hover:bg-amber-500/10"
+                                      : "text-violet-600 border-violet-500/20 hover:bg-violet-500/10"
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleAdmin(user);
+                                  }}
+                                  disabled={actionLoading === user.id}
+                                >
+                                  {actionLoading === user.id ? (
+                                    <RefreshCw className="h-3 w-3 animate-spin" />
+                                  ) : user.isAdmin ? (
+                                    <><Shield className="h-3 w-3" /> Remove Admin</>
+                                  ) : (
+                                    <><Crown className="h-3 w-3" /> Make Admin</>
+                                  )}
+                                </Button>
+
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 gap-1 text-xs text-blue-600 border-blue-500/20 hover:bg-blue-500/10"
+                                  onClick={(e) => e.stopPropagation()}
+                                  disabled={actionLoading === user.id}
+                                >
+                                  <Key className="h-3 w-3" />
+                                  Reset Password
+                                </Button>
+
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 gap-1 text-xs text-red-600 border-red-500/20 hover:bg-red-500/10"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setUserToDelete(user);
+                                    setDeleteDialogOpen(true);
+                                  }}
+                                  disabled={actionLoading === user.id}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                  Delete User
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))
               )}
             </tbody>
@@ -345,6 +569,35 @@ export function UserManagement() {
           </div>
         )}
       </div>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{userToDelete?.email}</strong>? This action cannot be undone.
+              All user data including files, documents, and emails will be permanently deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteUser}
+              disabled={actionLoading === userToDelete?.id}
+            >
+              {actionLoading === userToDelete?.id ? (
+                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Delete User
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
