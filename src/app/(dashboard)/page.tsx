@@ -17,7 +17,21 @@ export default async function HomePage() {
   });
 
   if (user?.isAdmin) {
-    return <AdminPanel />;
+    const [userCount, fileCount, shareLinkCount, totalStorageAggregation] = await Promise.all([
+      prisma.user.count(),
+      prisma.file.count(),
+      prisma.shareLink.count(),
+      prisma.file.aggregate({ _sum: { size: true } }),
+    ]);
+
+    const stats = {
+      userCount,
+      fileCount,
+      shareLinkCount,
+      totalBytes: Number(totalStorageAggregation._sum.size || 0),
+    };
+
+    return <AdminPanel initialStats={stats} />;
   }
 
   return <FileBrowser folderId={null} />;

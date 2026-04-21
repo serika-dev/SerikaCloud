@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import { Upload, X, FileIcon, Loader2 } from "lucide-react";
+import { Upload, X, FileIcon, Loader2, AlertCircle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { formatBytes } from "@/lib/utils";
@@ -17,20 +17,29 @@ interface UploadingFile {
   progress: number;
   status: "uploading" | "done" | "error";
   error?: string;
+  retries: number;
 }
+
+// Upload config
+const MAX_CONCURRENT_UPLOADS = 4; // Upload 4 files at once
+const MAX_RETRIES = 3;
+const UPLOAD_TIMEOUT = 300000; // 5 minute timeout for large files
 
 export function UploadZone({ folderId, onUploadComplete }: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploads, setUploads] = useState<UploadingFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const activeUploadsRef = useRef(0);
+  const queueRef = useRef<File[]>([]);
 
-  const uploadFile = useCallback(
-    async (file: File) => {
-      setUploads((prev) => [
-        ...prev,
-        { file, progress: 0, status: "uploading" },
-      ]);
+  const updateUpload = useCallback((file: File, updates: Partial<UploadingFile>) => {
+    setUploads((prev) =>
+      prev.map((u) => (u.file === file ? { ...u, ...updates } : u))
+    );
+  }, []);
 
+  const uploadSingleFile = useCallback(
+    async (file: File, attempt = 0): Promise<boolean> => {
       try {
         const xhr = new XMLHttpRequest();
 
@@ -38,65 +47,96 @@ export function UploadZone({ folderId, onUploadComplete }: UploadZoneProps) {
           xhr.upload.addEventListener("progress", (e) => {
             if (e.lengthComputable) {
               const pct = Math.round((e.loaded / e.total) * 100);
-              setUploads((prev) =>
-                prev.map((u) =>
-                  u.file === file ? { ...u, progress: pct } : u
-                )
-              );
+              updateUpload(file, { progress: pct });
             }
           });
 
           xhr.addEventListener("load", () => {
             if (xhr.status >= 200 && xhr.status < 300) {
-              setUploads((prev) =>
-                prev.map((u) =>
-                  u.file === file ? { ...u, progress: 100, status: "done" } : u
-                )
-              );
+              updateUpload(file, { progress: 100, status: "done" });
               resolve();
             } else {
-              const resp = JSON.parse(xhr.responseText);
-              reject(new Error(resp.error || "Upload failed"));
+              let errorMsg = "Upload failed";
+              try {
+                const resp = JSON.parse(xhr.responseText);
+                errorMsg = resp.error || errorMsg;
+              } catch {}
+              reject(new Error(errorMsg));
             }
           });
 
-          xhr.addEventListener("error", () => reject(new Error("Upload failed")));
+          xhr.addEventListener("error", () => reject(new Error("Network error")));
+          xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
+          xhr.addEventListener("timeout", () => reject(new Error("Upload timeout")));
+
           xhr.open("POST", "/api/files/upload");
           xhr.setRequestHeader("X-File-Name", encodeURIComponent(file.name));
-          if (folderId) {
-            xhr.setRequestHeader("X-Folder-Id", folderId);
-          }
+          if (folderId) xhr.setRequestHeader("X-Folder-Id", folderId);
           xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+          xhr.timeout = UPLOAD_TIMEOUT;
           xhr.send(file);
         });
 
         toast.success(`Uploaded ${file.name}`);
+        return true;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Upload failed";
-        setUploads((prev) =>
-          prev.map((u) =>
-            u.file === file ? { ...u, status: "error", error: message } : u
-          )
-        );
+
+        if (attempt < MAX_RETRIES) {
+          updateUpload(file, { retries: attempt + 1 });
+          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          return uploadSingleFile(file, attempt + 1);
+        }
+
+        updateUpload(file, { status: "error", error: message });
         toast.error(`Failed to upload ${file.name}: ${message}`);
+        return false;
       }
     },
-    [folderId]
+    [folderId, updateUpload]
   );
 
-  const handleFiles = useCallback(
-    async (files: FileList | File[]) => {
-      const fileArray = Array.from(files);
-      for (const file of fileArray) {
-        await uploadFile(file);
-      }
-      onUploadComplete();
-      // Clean completed uploads after 3 seconds
+  const processQueue = useCallback(async () => {
+    while (queueRef.current.length > 0 && activeUploadsRef.current < MAX_CONCURRENT_UPLOADS) {
+      const file = queueRef.current.shift();
+      if (!file) continue;
+
+      activeUploadsRef.current++;
+      uploadSingleFile(file).finally(() => {
+        activeUploadsRef.current--;
+        processQueue();
+      });
+    }
+
+    // All done
+    if (queueRef.current.length === 0 && activeUploadsRef.current === 0) {
       setTimeout(() => {
-        setUploads((prev) => prev.filter((u) => u.status === "uploading"));
-      }, 3000);
+        onUploadComplete();
+        setUploads((prev) => prev.filter((u) => u.status !== "done"));
+      }, 2000);
+    }
+  }, [uploadSingleFile, onUploadComplete]);
+
+  const handleFiles = useCallback(
+    (files: FileList | File[]) => {
+      const fileArray = Array.from(files);
+
+      // Add to state
+      setUploads((prev) => [
+        ...prev,
+        ...fileArray.map((file) => ({
+          file,
+          progress: 0,
+          status: "uploading" as const,
+          retries: 0,
+        })),
+      ]);
+
+      // Add to queue and start processing
+      queueRef.current.push(...fileArray);
+      processQueue();
     },
-    [uploadFile, onUploadComplete]
+    [processQueue]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -168,24 +208,47 @@ export function UploadZone({ folderId, onUploadComplete }: UploadZoneProps) {
           {uploads.map((upload, i) => (
             <div
               key={i}
-              className="flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2"
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
+                upload.status === "error" ? "bg-red-500/10" : "bg-muted/50"
+              }`}
             >
-              <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <FileIcon className={`h-4 w-4 shrink-0 ${
+                upload.status === "error" ? "text-red-400" : "text-muted-foreground"
+              }`} />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium truncate">{upload.file.name}</p>
+                <p className="text-xs font-medium truncate flex items-center gap-1">
+                  {upload.file.name}
+                  <span className="text-[10px] text-muted-foreground">
+                    ({formatBytes(upload.file.size)})
+                  </span>
+                </p>
                 <div className="flex items-center gap-2 mt-1">
-                  <Progress value={upload.progress} className="h-1 flex-1" />
+                  <Progress 
+                    value={upload.progress} 
+                    className={`h-1 flex-1 ${upload.status === "error" ? "bg-red-200" : ""}`}
+                  />
                   <span className="text-[10px] text-muted-foreground shrink-0">
                     {upload.status === "done"
                       ? "✓"
                       : upload.status === "error"
                       ? "✗"
+                      : upload.retries > 0
+                      ? `Retry ${upload.retries}/${MAX_RETRIES}`
                       : `${upload.progress}%`}
                   </span>
                 </div>
+                {upload.status === "error" && upload.error && (
+                  <p className="text-[10px] text-red-400 mt-0.5">{upload.error}</p>
+                )}
               </div>
-              {upload.status === "uploading" && (
+              {upload.status === "uploading" && upload.retries === 0 && (
                 <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+              )}
+              {upload.status === "uploading" && upload.retries > 0 && (
+                <RotateCcw className="h-3 w-3 animate-spin text-amber-400" />
+              )}
+              {upload.status === "error" && (
+                <AlertCircle className="h-3 w-3 text-red-400" />
               )}
             </div>
           ))}
