@@ -65,14 +65,33 @@ function resolveHostname(req: {
 }
 
 /**
+ * Normalise a pathname to a guaranteed same-origin, single-slash-rooted path.
+ *
+ * `req.nextUrl.pathname` preserves a leading slash run: a request to
+ * `https://cloud.serika.dev//evil.com` has pathname `//evil.com`. Anything that
+ * later resolves such a value as a URL (`new URL(v, base)`, `router.push(v)`,
+ * `<a href>`) treats it as protocol-relative and leaves the origin. Collapsing
+ * the leading `/` or `\` run to a single `/` makes that impossible, so the
+ * `callbackUrl` we hand to the login page can never become an off-site redirect.
+ */
+function toSafePath(pathname: string): string {
+  return `/${pathname.replace(/^[/\\]+/, "")}`;
+}
+
+/**
  * Map a hostname to a sub-app, or `null` for the default app.
  *
  * Uses suffix matching against ROOT_DOMAIN rather than a brittle
  * `split(".")[0]` / `parts.length >= 3` check, so it copes with:
- *   - the apex domain and `www.` / `cloud.` / `app.`
- *   - multi-level hosts (`mail.staging.serika.dev`)
+ *   - the apex domain and `www.` / `cloud.` / `app.`  -> default app
+ *   - multi-level hosts (`mail.staging.serika.dev`)   -> `mail`
  *   - trailing-dot FQDNs and ports (already stripped by resolveHostname)
- *   - unknown hosts (custom org domains, preview URLs) -> default app
+ *   - unknown base domains (custom org domains, preview URLs): the left-most
+ *     label is still honoured when it names a known sub-app, so
+ *     `mail.customdomain.com` -> `mail`; anything else -> default app.
+ *
+ * The return value is always a member of SUBDOMAIN_APPS or null — callers may
+ * interpolate it into a path without further validation.
  */
 function getSubApp(hostname: string): SubApp | null {
   if (!hostname) return null;
@@ -119,10 +138,21 @@ export default auth((req) => {
   const isShareRoute = pathname.startsWith("/share");
 
   const hostname = resolveHostname(req);
-  const subApp =
+
+  // The `?app=` override is a local-dev affordance, but it is attacker
+  // controllable, so validate it against the known app list *here* rather than
+  // at each use site. `subApp` is therefore only ever a real sub-app or null,
+  // and interpolating it into a path is safe by construction.
+  //
+  // Without this, `/login?app=//evil.com` produced
+  // `new URL("///evil.com", req.url)` === "https://evil.com/" — an open
+  // redirect for any logged-in user who followed the link.
+  const appParam = req.nextUrl.searchParams.get("app");
+  const subApp: SubApp | null =
     getSubApp(hostname) ??
-    (req.nextUrl.searchParams.get("app") as SubApp | null); // dev: ?app=mail
-  const isSubApp = !!subApp && SUBDOMAIN_APP_SET.has(subApp);
+    (appParam !== null && SUBDOMAIN_APP_SET.has(appParam)
+      ? (appParam as SubApp)
+      : null);
 
   // ---- 2. API + public share links: always pass through, on any host. -------
   // These do their own auth (session, bearer token, or none) and must stay
@@ -143,14 +173,14 @@ export default auth((req) => {
 
   // ---- 4. Everything else is an authenticated app page. ------------------
   if (!isLoggedIn) {
-    const callbackUrl = encodeURIComponent(pathname + search);
+    const callbackUrl = encodeURIComponent(toSafePath(pathname) + search);
     return NextResponse.redirect(
       new URL(`/login?callbackUrl=${callbackUrl}`, req.url)
     );
   }
 
   // ---- 5. Sub-app host: rewrite host-root path -> internal route segment. ---
-  if (isSubApp) {
+  if (subApp) {
     const alreadyScoped =
       pathname === `/${subApp}` || pathname.startsWith(`/${subApp}/`);
 

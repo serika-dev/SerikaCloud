@@ -18,7 +18,12 @@ import type { NextAuthConfig } from "next-auth";
  *      The values "none" / "off" / "host" force host-only (opt back out of the
  *      auto-derivation below).
  *   2. Derived from `NEXTAUTH_URL` when it points at a subdomain host
- *      (>= 3 labels, not an IP / not localhost) -> "." + last two labels.
+ *      (>= 3 labels, not an IP / not localhost) -> "." + the host with its
+ *      left-most label removed, i.e. the cookie is scoped to that host's
+ *      siblings and no wider:
+ *        cloud.serika.dev         -> .serika.dev
+ *        cloud.staging.serika.dev -> .staging.serika.dev
+ *        www.example.co.uk        -> .example.co.uk
  *   3. Otherwise `undefined` -> Auth.js default (host-only cookie, unchanged
  *      behaviour — zero risk for single-domain deployments).
  */
@@ -53,7 +58,15 @@ function resolveCookieDomain(): string | undefined {
   // For an apex host (bar.tld) stay host-only unless AUTH_COOKIE_DOMAIN is set.
   if (labels.length < 3) return undefined;
 
-  return `.${labels.slice(-2).join(".")}`;
+  // Drop ONLY the left-most label. Taking "the last two labels" instead would
+  // widen the cookie past the deployment it belongs to:
+  //   - cloud.staging.serika.dev -> .serika.dev would ship the staging session
+  //     cookie to production hosts (and vice versa);
+  //   - www.example.co.uk -> .co.uk is a public suffix, which every browser
+  //     rejects outright, silently breaking login.
+  // Sibling hosts (cloud/write/mail/present.<rest>) still match, which is
+  // exactly the SSO scope we need. Use AUTH_COOKIE_DOMAIN for anything wider.
+  return `.${labels.slice(1).join(".")}`;
 }
 
 const cookieDomain = resolveCookieDomain();
