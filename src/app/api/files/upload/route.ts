@@ -1,98 +1,67 @@
+import { randomUUID } from "node:crypto";
+import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { uploadStreamToB2 } from "@/lib/storage";
+import { storage } from "@/lib/storage";
 import { generateB2Key } from "@/lib/utils";
-import { lookup } from "mime-types";
+import { checkUploadDestination, parseUploadMetadata, requireUploadUser, serializeUploadedFile, UploadError, uploadErrorResponse } from "@/lib/uploads";
 
+export const runtime = "nodejs";
+
+// Kept for empty files and existing API clients. The browser uses multipart for
+// non-empty files so large uploads never need one oversized HTTP request.
 export async function POST(request: Request) {
+  let key: string | undefined;
+  let saved = false;
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const userId = await requireUploadUser();
+    const declaredSize = request.headers.get("x-file-size") ?? request.headers.get("content-length");
+    if (declaredSize === null || !/^\d+$/.test(declaredSize)) {
+      throw new UploadError("Provide the file size in X-File-Size or Content-Length.", 411);
     }
-
-    const filenameRaw = request.headers.get("x-file-name");
-    const filename = filenameRaw ? decodeURIComponent(filenameRaw) : null;
-    const folderId = request.headers.get("x-folder-id");
-    const contentType = request.headers.get("content-type") || "application/octet-stream";
-    const contentLength = Number(request.headers.get("content-length") || "0");
-
-    if (!filename) {
-      return NextResponse.json({ error: "No filename provided in x-file-name header" }, { status: 400 });
-    }
-    if (!request.body) {
-      return NextResponse.json({ error: "No request body provided" }, { status: 400 });
-    }
-
-    // Check storage quota
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { storageUsed: true, storageLimit: true },
+    const metadata = parseUploadMetadata({
+      name: decodeURIComponent(request.headers.get("x-file-name") ?? ""),
+      size: Number(declaredSize), type: request.headers.get("content-type"),
+      folderId: request.headers.get("x-folder-id"),
     });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    const newTotal = Number(user.storageUsed) + contentLength;
-    if (newTotal > Number(user.storageLimit)) {
-      const limitGB = Math.round(Number(user.storageLimit) / (1024 * 1024 * 1024) * 10) / 10;
-      return NextResponse.json(
-        { error: `Storage quota exceeded. You have reached your ${limitGB}GB limit.` },
-        { status: 413 }
-      );
-    }
-
-    // Validate folder belongs to user if specified
-    if (folderId) {
-      const folder = await prisma.folder.findFirst({
-        where: { id: folderId, userId: session.user.id },
-      });
-      if (!folder) {
-        return NextResponse.json({ error: "Folder not found" }, { status: 404 });
+    const length = request.headers.get("content-length");
+    if (length !== null && Number(length) !== metadata.size) throw new UploadError("File size does not match Content-Length.");
+    if (!request.body && metadata.size !== 0) throw new UploadError("No file data was provided.");
+    await checkUploadDestination(prisma, userId, metadata);
+    key = generateB2Key(userId, randomUUID());
+    let received = 0;
+    const stream = Readable.from((async function* () {
+      if (request.body) {
+        for await (const chunk of Readable.fromWeb(request.body as import("node:stream/web").ReadableStream<Uint8Array>)) {
+          received += chunk.length;
+          if (received > metadata.size) throw new UploadError("File contains more bytes than declared.");
+          yield chunk;
+        }
       }
-    }
-
-    // Upload to B2 via streaming (minimizes server memory for 1TB files)
-    const b2Key = generateB2Key(session.user.id, filename);
-    const mimeType = lookup(filename) || contentType;
-
-    await uploadStreamToB2(b2Key, request.body, mimeType);
-
-    // Create file record
-    const fileRecord = await prisma.file.create({
-      data: {
-        name: filename,
-        mimeType,
-        size: BigInt(contentLength),
-        b2Key,
-        folderId: folderId || null,
-        userId: session.user.id,
-      },
+      if (received !== metadata.size) throw new UploadError("The upload was incomplete. Please retry.");
+    })());
+    await storage.uploadStream(key, stream, metadata.mimeType);
+    if ((await storage.getFileHead(key)).contentLength !== metadata.size) throw new UploadError("The saved file size does not match the upload.", 409);
+    const b2Key = key;
+    const file = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
+      const used = await checkUploadDestination(tx, userId, metadata);
+      const record = await tx.file.create({ data: {
+        name: metadata.name, mimeType: metadata.mimeType, size: BigInt(received),
+        b2Key, folderId: metadata.folderId, userId,
+      } });
+      await tx.user.update({ where: { id: userId }, data: { storageUsed: used + BigInt(received) } });
+      return record;
     });
-
-    // Update storage used
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: { storageUsed: BigInt(newTotal) },
-    });
-
-    return NextResponse.json(
-      {
-        id: fileRecord.id,
-        name: fileRecord.name,
-        mimeType: fileRecord.mimeType,
-        size: Number(fileRecord.size),
-        createdAt: fileRecord.createdAt,
-      },
-      { status: 201 }
-    );
+    saved = true;
+    return NextResponse.json(serializeUploadedFile(file), { status: 201 });
   } catch (error) {
-    console.error("Upload error:", error);
-    return NextResponse.json(
-      { error: "Failed to upload file" },
-      { status: 500 }
-    );
+    if (key && !saved) {
+      // Do not remove a file if a DB commit succeeded but its response was lost.
+      try {
+        if (!await prisma.file.findUnique({ where: { b2Key: key } })) await storage.deleteFile(key);
+      } catch (cleanupError) { console.error("Upload cleanup failed:", cleanupError); }
+    }
+    return uploadErrorResponse(error);
   }
 }

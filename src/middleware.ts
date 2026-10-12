@@ -201,7 +201,8 @@ export default auth((req) => {
 export const config = {
   matcher: [
     // Run on everything except Next internals, well-known static files and the
-    // large-body upload endpoint (which must not be buffered by middleware).
+    // upload endpoints (including multipart children), which authenticate in
+    // their handlers and must not have their bodies buffered by middleware.
     "/((?!_next/static|_next/image|_next/data|favicon.ico|robots.txt|sitemap.xml|manifest.webmanifest|api/files/upload).*)",
   ],
 };
